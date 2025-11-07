@@ -51,21 +51,22 @@ class DeveloperShortcutsController extends OGameController
             $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('crystal_mine')->id, 30);
             $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('deuterium_synthesizer')->id, 30);
             $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('solar_plant')->id, 30);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('fusion_plant')->id, 30);
         } elseif ($request->has('set_storages')) {
             // Handle "Set all storages to level 30"
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('metal_store')->id, 15);
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('crystal_store')->id, 15);
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('deuterium_store')->id, 15);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('metal_store')->id, 30);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('crystal_store')->id, 30);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('deuterium_store')->id, 30);
         } elseif ($request->has('set_shipyard')) {
-            // Handle "Set all shipyard facilities to level 12"
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('shipyard')->id, 12);
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 12);
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('nano_factory')->id, 12);
+            // Handle "Set all shipyard facilities to level 15"
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('shipyard')->id, 15);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('robot_factory')->id, 15);
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('nano_factory')->id, 15);
         } elseif ($request->has('set_research')) {
-            // Handle "Set all research to level 10"
-            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('research_lab')->id, 12);
+            // Handle "Set all research to level 15"
+            $playerService->planets->current()->setObjectLevel(ObjectService::getObjectByMachineName('research_lab')->id, 15);
             foreach (ObjectService::getResearchObjects() as $research) {
-                $playerService->setResearchLevel($research->machine_name, 10);
+                $playerService->setResearchLevel($research->machine_name, 15);
             }
         } elseif ($request->has('reset_buildings')) {
             // Handle "Reset all buildings"

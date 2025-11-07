@@ -27,9 +27,9 @@
                                 <div class="group bborder" style="display: block;">
                                     <div class="fieldwrapper">
                                         <input type="submit" class="btn_blue" name="set_mines" value="@lang('Set all mines to level 30')">
-                                        <input type="submit" class="btn_blue" name="set_storages" value="@lang('Set all storages to level 15')">
-                                        <input type="submit" class="btn_blue" name="set_shipyard" value="@lang('Set all shipyard facilities to level 12')">
-                                        <input type="submit" class="btn_blue" name="set_research" value="@lang('Set all research to level 10')">
+                                        <input type="submit" class="btn_blue" name="set_storages" value="@lang('Set all storages to level 30')">
+                                        <input type="submit" class="btn_blue" name="set_shipyard" value="@lang('Set all shipyard facilities to level 15')">
+                                        <input type="submit" class="btn_blue" name="set_research" value="@lang('Set all research to level 15')">
                                     </div>
                                 </div>
 
