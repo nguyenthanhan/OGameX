@@ -91,11 +91,13 @@ Route::middleware(['auth', 'globalgame', 'locale', 'firstlogin'])->group(functio
     Route::get('/ajax/shipyard', [ShipyardController::class, 'ajax'])->name('shipyard.ajax');
     Route::post('/shipyard/add-buildrequest', [ShipyardController::class, 'addBuildRequest'])->name('shipyard.addbuildrequest');
     Route::post('/ajax/shipyard/halve-unit', [ShipyardController::class, 'halveUnit'])->name('shipyard.halveunit');
+    Route::post('/shipyard/cancel-buildrequest', [ShipyardController::class, 'cancelBuildRequest'])->name('shipyard.cancelbuildrequest');
 
     // Defense
     Route::get('/defense', [DefenseController::class, 'index'])->name('defense.index');
     Route::get('/ajax/defense', [DefenseController::class, 'ajax'])->name('defense.ajax');
     Route::post('/defense/add-buildrequest', [DefenseController::class, 'addBuildRequest'])->name('defense.addbuildrequest');
+    Route::post('/defense/cancel-buildrequest', [DefenseController::class, 'cancelBuildRequest'])->name('defense.cancelbuildrequest');
 
     // Techtree
     Route::get('/ajax/techtree', [TechtreeController::class, 'ajax'])->name('techtree.ajax');
