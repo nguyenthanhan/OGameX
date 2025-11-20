@@ -123,7 +123,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'username', 'email', 'password', 'lang', 'espionage_probes_amount',
+        'username', 'email', 'password', 'lang',
     ];
 
     /**
@@ -262,5 +262,23 @@ class User extends Authenticatable
     public function hasCharacterClass(): bool
     {
         return $this->character_class !== null;
+    }
+     * Get the AI configuration this bot uses
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function aiConfig()
+    {
+        return $this->belongsTo(BotAiConfig::class, 'bot_ai_config_id');
+    }
+
+    /**
+     * Get the backup AI configuration this bot uses
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     */
+    public function backupAiConfig()
+    {
+        return $this->belongsTo(BotAiConfig::class, 'backup_bot_ai_config_id');
     }
 }

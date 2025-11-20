@@ -32,3 +32,9 @@ Schedule::command(CleanupWreckFields::class)->hourly()->withoutOverlapping();
 
 // Process Dark Matter regeneration every 5 minutes
 Schedule::command(DarkMatterRegenerateCommand::class)->everyFiveMinutes()->withoutOverlapping();
+
+// Game Queue Processing (buildings, research, units)
+Schedule::job(new \OGame\Jobs\ProcessGameQueuesJob)->everyMinute();
+
+// Bot System Scheduled Jobs
+Schedule::job(new \OGame\Jobs\Bot\ProcessBotTurnsJob)->everyFiveMinutes();

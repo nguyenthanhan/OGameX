@@ -9,7 +9,6 @@
 <a href="https://main.ogamex.dev">Live demo 🚀</a> • <a href="#installation">Installation 📦</a> • <a href="https://github.com/lanedirt/OGameX/blob/main/CONTRIBUTING.md">Contributing 💻</a>
 </p>
 
-
 <p align="center">
 <strong>Open-source OGame redesign clone</strong>
 </p>
@@ -31,7 +30,6 @@
 
 </div>
 
-
 OGameX is an open-source OGame redesign clone. This clone is built fully from scratch using the Laravel 12.x framework and uses modern PHP practices. All major functionality is covered by unit and feature tests which automatically run on every build.
 
 We welcome any and all contributions to this project! If you want to help out, please read the [contributing](#contributing) section. If you have any questions you can [join the OGameX discord](https://discord.com/invite/HJ4QRxxB5N) to get in touch with the maintainers and other contributors.
@@ -39,10 +37,12 @@ We welcome any and all contributions to this project! If you want to help out, p
 Disclaimer: this project is purely fan-based and does not contain any commercial features. All backend code is written from scratch. The rights and concepts for the artwork and frontend belong to the original creators: GameForge GmbH. Support them by checking out the official version: https://ogame.org.
 
 ## 🖥️ Live demo
+
 - Main branch (nightly builds): [https://main.ogamex.dev](https://main.ogamex.dev)
 - Latest stable release **(0.13.0)**: [https://release.ogamex.dev](https://release.ogamex.dev)
 
 ## 📝 Table of Contents
+
 - [1. Example screenshots](#screenshots)
 - [2. About the author](#author)
 - [3. Goal](#goal)
@@ -54,13 +54,13 @@ Disclaimer: this project is purely fan-based and does not contain any commercial
   - [a) Development: Install OGameX using Docker](#development)
   - [b) Production: Install OGameX using Docker](#production)
 - [8. Upgrade](#upgrade)
-- [9. Support](#support)
-- [10. Sponsorship](#sponsorship)
-- [11. License](#license)
-- [12. OGameX related projects](#related-projects)
+- [9. Bot AI Configuration](#bot-ai-configuration)
+- [10. Support](#support)
+- [11. Sponsorship](#sponsorship)
+- [12. License](#license)
+- [13. OGameX related projects](#related-projects)
 
 ## <a name="screenshots"></a> 🖥️ 1. Example screenshots
-
 
 <img width="1142" alt="Screenshot 2024-10-06 at 15 41 14" src="https://github.com/user-attachments/assets/7f9041ad-82cd-42b0-acd1-0036c0f49da2">
 <img width="1129" alt="Screenshot 2024-10-06 at 15 41 45" src="https://github.com/user-attachments/assets/d8a9e612-1433-4750-9f5f-05246f642740">
@@ -118,26 +118,31 @@ Read the [CONTRIBUTING.md](https://github.com/lanedirt/OGameX/blob/main/CONTRIBU
 This project is a non-commercial hobby project. All rights and concepts related to OGame are owned by GameForge GmbH. We encourage supporters to try the official OGame at https://ogame.org to support its creators.
 
 ## <a name="installation"></a> 🖥️ 7. Installation
+
 The recommended way to install OGameX is by running the bundled Docker containers. This takes care of all the dependencies and is the easiest way to get started.
 
 If you instead wish to install OGameX manually, see the list of requirements for Laravel 12.x and how to deploy manually to a server here: https://laravel.com/docs/12.x/deployment.
 
 ### <a name="development"></a> a) Install for local development
+
 For local development use the default docker-compose file that is included in this repository. This configuration is optimized for development and includes several tools that are useful for debugging and testing.
 
 Please note that performance of the development mode is slow on Windows (compared to MacOS/Linux) due to overhead of running Docker on Windows. Loading pages with development mode enabled can take multiple seconds on Windows. If you want to run OGameX on Windows, I advise to use the production mode instead. One of the main differences is that the production configuration enables PHP OPcache which speeds up the application, but this also means that the PHP files are not updated (instantly) when you change them. This makes it less suitable for development.
 
 1. Clone the repository.
-  ```
-  $ git clone https://github.com/lanedirt/OGameX.git
-  $ cd OGameX
-  ```
+
+```
+$ git clone https://github.com/lanedirt/OGameX.git
+$ cd OGameX
+```
 
 2. Launch the project using Docker Compose:
-  ```
-  $ docker compose up -d
-  ```
-  > The default setup binds to ports 80/443. Modify `docker-compose.yml` if needed. PhpMyAdmin is also included for database management and is bound to port 8080. If you don't create a .env, the default .env.example will be copied to create it.
+
+```
+$ docker compose up -d
+```
+
+> The default setup binds to ports 80/443. Modify `docker-compose.yml` if needed. PhpMyAdmin is also included for database management and is bound to port 8080. If you don't create a .env, the default .env.example will be copied to create it.
 
 **Important:** it can take up to 10 minutes for the `ogamex-app` container to start, this is because of composer initialization and Rust compiling that happens on the first run. Please be patient and wait for all containers to have fully started.
 
@@ -148,30 +153,34 @@ Create a new account to start using OGameX. The first account created will be au
 > Note: if you need to run manual `php artisan` commands, you can SSH into the `ogamex-app` container with the `docker compose exec -it ogamex-app bash` command.
 
 ### <a name="production"></a> b) Install for production
+
 For production there is a separate docker-compose file called `docker-compose.prod.yml`. This configuration contains
 several performance optimizations and security settings that are not present in the development configuration.
 
-***Caution:*** the production configuration is not yet fully optimized and should be used with caution. As an example, the database root user uses a default password which should be changed to something unique. You should review all settings before deploying this project to a publicly accessible server.
+**_Caution:_** the production configuration is not yet fully optimized and should be used with caution. As an example, the database root user uses a default password which should be changed to something unique. You should review all settings before deploying this project to a publicly accessible server.
 
 The instructions below are for Linux. OGameX should also work under Docker for Windows but the steps might be a little bit different.
 
 1. Clone the git repo.
-  ```
-  $ git clone https://github.com/lanedirt/OGameX.git
-  $ cd OGameX
-  ```
+
+```
+$ git clone https://github.com/lanedirt/OGameX.git
+$ cd OGameX
+```
 
 2. Copy `.env.example-prod` to `.env`.
-  ```
-  $ cp .env.example-prod .env
-  ```
+
+```
+$ cp .env.example-prod .env
+```
 
 3. Launch the project using Docker Compose:
-  ```
-  $ docker compose -f docker-compose.prod.yml up -d --build --force-recreate
-  ```
 
-  > The default setup binds to ports 80/443, to change it modify `docker-compose.yml`. PhpMyAdmin is also included for database management and is bound to port 8080, however to access it you need to explicitly specify your IP addresses via `./docker/phpmyadmin/.htaccess` for safety purposes.
+```
+$ docker compose -f docker-compose.prod.yml up -d --build --force-recreate
+```
+
+> The default setup binds to ports 80/443, to change it modify `docker-compose.yml`. PhpMyAdmin is also included for database management and is bound to port 8080, however to access it you need to explicitly specify your IP addresses via `./docker/phpmyadmin/.htaccess` for safety purposes.
 
 **Important:** it can take up to 10 minutes for the `ogamex-app` container to start, this is because of composer initialization and Rust compiling that happens on the first run. Please be patient and wait for all containers to have fully started.
 
@@ -184,47 +193,81 @@ Create a new account to start using OGameX. The first account created will be au
 ## <a name="upgrade"></a> 🖥️ 8. Upgrade and misc instructions
 
 ### Upgrade OGameX to a new version
+
 If you want to upgrade an existing installation of OGameX to a new version, follow these steps:
 
 1. Stop the existing containers:
-  ```
-  $ docker compose down
-  ```
-  2. Pull the latest changes from the main branch or checkout the new release tag:
-  ```
-  $ git pull origin main
-  ```
-  -- or --
-  ```
-  $ git checkout 0.13.0 # replace with the latest release tag
-  ```
-  3. Rebuild and start the containers:
 
-  **For development:**
-  ```
-  $ docker compose up -d --build --force-recreate --remove-orphans
-  ```
-  **For production:**
-  ```
-  $ docker compose -f docker-compose.prod.yml up -d --build --force-recreate --remove-orphans
-  ```
-  > When the docker containers are started, the entrypoint script in `./docker/entrypoint.sh` will automatically run the appropriate laravel install commands to upgrade the database schema and refresh the cache. Note that depending on the migrations this might take a short while. After the containers are started, you can visit the application at `https://localhost` (or http://localhost) to check if the upgrade was successful. If you run into any issues, please check the logs for more information or open an issue on GitHub.
+```
+$ docker compose down
+```
+
+2. Pull the latest changes from the main branch or checkout the new release tag:
+
+```
+$ git pull origin main
+```
+
+-- or --
+
+```
+$ git checkout 0.13.0 # replace with the latest release tag
+```
+
+3. Rebuild and start the containers:
+
+```
+$ docker compose down
+```
+
+2. Pull the latest changes from the main branch or checkout the new release tag:
+
+```
+$ git pull origin main
+```
+
+-- or --
+
+```
+$ git checkout 0.12.0 # replace with the latest release tag
+```
+
+3. Rebuild and start the containers:
+
+**For development:**
+
+```
+$ docker compose up -d --build --force-recreate --remove-orphans
+```
+
+**For production:**
+
+```
+$ docker compose -f docker-compose.prod.yml up -d --build --force-recreate --remove-orphans
+```
+
+> When the docker containers are started, the entrypoint script in `./docker/entrypoint.sh` will automatically run the appropriate laravel install commands to upgrade the database schema and refresh the cache. Note that depending on the migrations this might take a short while. After the containers are started, you can visit the application at `https://localhost` (or http://localhost) to check if the upgrade was successful. If you run into any issues, please check the logs for more information or open an issue on GitHub.
 
 ### Assigning admin role
+
 By default, the first registered user is assigned the admin role which can see the admin bar and is able to change server settings. You can also assign the admin role manually via the command line:
-  ```
-  $ php artisan ogamex:admin:assign-role {username}
-  ```
-  To remove the admin role from a user, use the following command:
-  ```
-  $ php artisan ogamex:admin:remove-role {username}
-  ```
+
+```
+$ php artisan ogamex:assign-admin-role {username}
+```
+
+To remove the admin role from a user, use the following command:
+
+```
+$ php artisan ogamex:remove-admin-role {username}
+```
 
 ## <a name="support"></a> 📞 9. Support
 
 Did you encounter issues in this project? Please open a ticket on GitHub and we'll try to help you out as soon as possible.
 
 ## <a name="sponsorship"></a> 💰 10. Sponsorship
+
 We thank the following parties for sponsoring this project:
 
 <table>
@@ -249,15 +292,15 @@ We thank the following parties for sponsoring this project:
 
 Interested in supporting OGameX? We welcome sponsorships of all sizes! Your support helps us maintain and improve this open-source project. Please get in touch with us via GitHub or Discord to discuss sponsorship opportunities.
 
-## <a name="license"></a> 📰 11. License
+## <a name="license"></a> 📰 12. License
 
 The OGameX Laravel source code is open-source software licensed under the MIT license. See the LICENSE file for more details. All rights and concepts related to OGame are owned by GameForge GmbH.
 
-## <a name="related-projects"></a> 🌍 12. OGameX related projects
+## <a name="related-projects"></a> 🌍 13. OGameX related projects
 
 The following projects either host OGameX servers or are based on the OGameX core.
 
-*Note: these projects are maintained independently and are not affiliated with the OGameX project or its maintainers in any way.*
+_Note: these projects are maintained independently and are not affiliated with the OGameX project or its maintainers in any way._
 
 | Project Name | Description | Link | Type |
 |-------------|-------------|------|------|

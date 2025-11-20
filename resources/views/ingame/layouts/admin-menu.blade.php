@@ -67,6 +67,8 @@
             Server admin
         </div>
         <ul>
+            <li><a class="{{(Request::is('admin/bot-configs') ? 'active' : '') }}" href="{{ route('admin.bot-configs.index') }}">🤖 AI Providers</a></li>
+            <li><a class="{{(Request::is('admin/bot-monitor*') ? 'active' : '') }}" href="{{ route('admin.bot-monitor.dashboard') }}">🤖 Bot Monitor</a></li>
             <li><a class="{{(Request::is('admin/developer-shortcuts') ? 'active' : '') }}" href="{{ route('admin.developershortcuts.index') }}">Developer shortcuts</a></li>
             <li><a class="{{(Request::is('admin/server-settings') ? 'active' : '') }}" href="{{ route('admin.serversettings.index') }}">Server settings</a></li>
         </ul>

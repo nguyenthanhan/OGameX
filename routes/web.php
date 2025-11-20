@@ -234,4 +234,33 @@ Route::middleware(['auth', 'globalgame', 'locale', 'admin'])->group(function () 
     Route::post('/admin/developer-shortcuts/resources', [DeveloperShortcutsController::class, 'updateResources'])->name('admin.developershortcuts.update-resources');
     Route::post('/admin/developershortcuts/create-at-coords', [DeveloperShortcutsController::class, 'createAtCoords'])->name('admin.developershortcuts.create-at-coords');
     Route::post('/admin/developershortcuts/create-debris', [DeveloperShortcutsController::class, 'createDebris'])->name('admin.developershortcuts.create-debris');
+
+    // Bot AI Configuration Routes
+    Route::get('/admin/bot-configs', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'index'])->name('admin.bot-configs.index');
+    Route::get('/admin/bot-configs/create', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'create'])->name('admin.bot-configs.create');
+    Route::post('/admin/bot-configs', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'store'])->name('admin.bot-configs.store');
+    Route::get('/admin/bot-configs/{botAiConfig}/edit', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'edit'])->name('admin.bot-configs.edit');
+    Route::put('/admin/bot-configs/{botAiConfig}', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'update'])->name('admin.bot-configs.update');
+    Route::delete('/admin/bot-configs/{botAiConfig}', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'destroy'])->name('admin.bot-configs.destroy');
+    Route::post('/admin/bot-configs/{botAiConfig}/toggle', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'toggleActive'])->name('admin.bot-configs.toggle');
+    Route::post('/admin/bot-configs/{botAiConfig}/duplicate', [\OGame\Http\Controllers\Admin\BotAiConfigController::class, 'duplicate'])->name('admin.bot-configs.duplicate');
+
+    // Bot Management Routes
+    // Redirect to Bot Monitor instead of separate manage bots page
+    Route::get('/admin/bots', function() {
+        return redirect()->route('admin.bot-monitor.dashboard');
+    })->name('admin.bots.index');
+    Route::get('/admin/bots/create', [\OGame\Http\Controllers\Admin\BotController::class, 'create'])->name('admin.bots.create');
+    Route::post('/admin/bots', [\OGame\Http\Controllers\Admin\BotController::class, 'store'])->name('admin.bots.store');
+    Route::get('/admin/bots/{bot}/edit', [\OGame\Http\Controllers\Admin\BotController::class, 'edit'])->name('admin.bots.edit');
+    Route::put('/admin/bots/{bot}', [\OGame\Http\Controllers\Admin\BotController::class, 'update'])->name('admin.bots.update');
+    Route::delete('/admin/bots/{bot}', [\OGame\Http\Controllers\Admin\BotController::class, 'destroy'])->name('admin.bots.destroy');
+    Route::delete('/admin/bots/{bot}/force', [\OGame\Http\Controllers\Admin\BotController::class, 'forceDestroy'])->name('admin.bots.forceDestroy');
+    Route::post('/admin/bots/{bot}/toggle', [\OGame\Http\Controllers\Admin\BotController::class, 'toggleEnabled'])->name('admin.bots.toggle');
+    Route::post('/admin/bots/{bot}/reset-state', [\OGame\Http\Controllers\Admin\BotController::class, 'resetState'])->name('admin.bots.resetState');
+
+    // Bot Monitoring & Activity Routes
+    Route::get('/admin/bot-monitor', [\OGame\Http\Controllers\Admin\BotMonitorController::class, 'dashboard'])->name('admin.bot-monitor.dashboard');
+    Route::get('/admin/bot-monitor/{bot}', [\OGame\Http\Controllers\Admin\BotMonitorController::class, 'details'])->name('admin.bot-monitor.details');
+    Route::get('/admin/bot-monitor/{bot}/update', [\OGame\Http\Controllers\Admin\BotMonitorController::class, 'getUpdate'])->name('admin.bot-monitor.getUpdate');
 });
