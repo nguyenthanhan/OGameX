@@ -103,9 +103,10 @@
                         </td>
                         <td style="padding: 10px;">
                             <select name="bot_skill_level" required style="width: 100%; padding: 5px;">
-                                <option value="beginner" {{ old('bot_skill_level') == 'beginner' ? 'selected' : '' }}>Beginner</option>
-                                <option value="intermediate" {{ old('bot_skill_level') == 'intermediate' ? 'selected' : 'selected' }}>Intermediate</option>
-                                <option value="advanced" {{ old('bot_skill_level') == 'advanced' ? 'selected' : '' }}>Advanced</option>
+                                <option value="beginner" {{ old('bot_skill_level') == 'beginner' ? 'selected' : '' }}>Beginner (3/10)</option>
+                                <option value="intermediate" {{ old('bot_skill_level') == 'intermediate' ? 'selected' : 'selected' }}>Intermediate (5/10)</option>
+                                <option value="advanced" {{ old('bot_skill_level') == 'advanced' ? 'selected' : '' }}>Advanced (8/10)</option>
+                                <option value="expert" {{ old('bot_skill_level') == 'expert' ? 'selected' : '' }}>Expert (10/10)</option>
                             </select>
                         </td>
                     </tr>

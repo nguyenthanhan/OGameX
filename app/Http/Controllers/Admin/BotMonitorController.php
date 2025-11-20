@@ -57,22 +57,40 @@ class BotMonitorController extends Controller
                 ->with('error', 'User is not a bot');
         }
 
-        // Calculate statistics
-        $totalDecisions = DB::table('bot_decisions_active')
+        // Calculate statistics - ALL TIME
+        $totalDecisionsAll = DB::table('bot_decisions_active')
             ->where('user_id', $bot->id)
             ->count();
 
-        $successfulDecisions = DB::table('bot_decisions_active')
+        $successfulDecisionsAll = DB::table('bot_decisions_active')
             ->where('user_id', $bot->id)
             ->where('result', 'success')
             ->count();
 
-        $successRate = $totalDecisions > 0 ? ($successfulDecisions / $totalDecisions * 100) : 0;
+        $successRateAll = $totalDecisionsAll > 0 ? ($successfulDecisionsAll / $totalDecisionsAll * 100) : 0;
 
-        // Quota usage today (requests)
+        // Calculate statistics - TODAY
+        $totalDecisionsToday = DB::table('bot_decisions_active')
+            ->where('user_id', $bot->id)
+            ->where('created_at', '>=', now()->startOfDay())
+            ->count();
+
+        $successfulDecisionsToday = DB::table('bot_decisions_active')
+            ->where('user_id', $bot->id)
+            ->where('result', 'success')
+            ->where('created_at', '>=', now()->startOfDay())
+            ->count();
+
+        $successRateToday = $totalDecisionsToday > 0 ? ($successfulDecisionsToday / $totalDecisionsToday * 100) : 0;
+
+        // Quota usage - TODAY and ALL TIME
         $quotaUsageToday = DB::table('bot_quota_usage')
             ->where('bot_id', $bot->id)
             ->where('hour', '>=', now()->startOfDay())
+            ->sum('requests_used');
+
+        $quotaUsageAll = DB::table('bot_quota_usage')
+            ->where('bot_id', $bot->id)
             ->sum('requests_used');
 
         // Get AI provider name
@@ -84,20 +102,35 @@ class BotMonitorController extends Controller
             }
         }
 
-        // Get last decision
+        // Get last decision (most recent turn_id)
         $lastDecision = DB::table('bot_decisions_active')
             ->where('user_id', $bot->id)
             ->orderBy('created_at', 'desc')
             ->first();
 
+        // Get all actions from the last API response (same turn_id)
+        $lastActions = [];
+        if ($lastDecision) {
+            $lastActions = DB::table('bot_decisions_active')
+                ->where('user_id', $bot->id)
+                ->where('turn_id', $lastDecision->turn_id)
+                ->orderBy('created_at', 'asc')
+                ->get();
+        }
+
         return view('admin.bot-monitor.details', compact(
             'bot',
-            'totalDecisions',
-            'successfulDecisions',
-            'successRate',
+            'totalDecisionsAll',
+            'successfulDecisionsAll',
+            'successRateAll',
+            'totalDecisionsToday',
+            'successfulDecisionsToday',
+            'successRateToday',
             'quotaUsageToday',
+            'quotaUsageAll',
             'aiProvider',
-            'lastDecision'
+            'lastDecision',
+            'lastActions'
         ));
     }
 

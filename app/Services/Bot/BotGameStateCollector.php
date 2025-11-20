@@ -104,7 +104,9 @@ class BotGameStateCollector
                 // Queue status with details
                 'build_queue_busy' => $this->isBuildQueueBusy($planet),
                 'build_queue_count' => $this->getBuildQueueCount($planet),
+                'build_queue_items' => $this->getBuildQueueItems($planet),
                 'unit_queue_busy' => $this->isUnitQueueBusy($planet),
+                'unit_queue_items' => $this->getUnitQueueItems($planet),
             ];
         }
 
@@ -126,8 +128,8 @@ class BotGameStateCollector
             // Storage
             'metal_store', 'crystal_store', 'deuterium_store',
             // Facilities
-            'robotics_factory', 'shipyard', 'research_lab',
-            'alliance_depot', 'missile_silo', 'nanite_factory', 'terraformer',
+            'robot_factory', 'shipyard', 'research_lab',
+            'alliance_depot', 'missile_silo', 'nano_factory', 'terraformer',
             'lunar_base', 'sensor_phalanx', 'jump_gate',
         ];
 
@@ -303,6 +305,7 @@ class BotGameStateCollector
         return [
             'technologies' => $research,
             'research_queue_busy' => $this->isResearchQueueBusy($player),
+            'research_queue_items' => $this->getResearchQueueItems($player),
         ];
     }
 
@@ -313,8 +316,11 @@ class BotGameStateCollector
     {
         try {
             // Check if there's an active research
-            return \DB::table('research_queue')
-                ->where('user_id', $player->getId())
+            return \DB::table('research_queues')
+                ->join('planets', 'research_queues.planet_id', '=', 'planets.id')
+                ->where('planets.user_id', $player->getId())
+                ->where('research_queues.processed', 0)
+                ->where('research_queues.canceled', 0)
                 ->exists();
         } catch (\Exception $e) {
             // Table doesn't exist or error, assume not busy
@@ -516,5 +522,126 @@ class BotGameStateCollector
             'available_slots' => $maxPlanets - $currentPlanetCount,
             'has_colony_ship' => false, // TODO: Check actual colony ship count
         ];
+    }
+
+    /**
+     * Get building queue items with details
+     */
+    protected function getBuildQueueItems(PlanetService $planet): array
+    {
+        $items = [];
+        
+        try {
+            $queueItems = \DB::table('building_queues')
+                ->where('planet_id', $planet->getPlanetId())
+                ->where('processed', 0)
+                ->where('canceled', 0)
+                ->orderBy('time_start', 'asc')
+                ->get();
+            
+            foreach ($queueItems as $item) {
+                try {
+                    $object = \OGame\Services\ObjectService::getObjectById($item->object_id);
+                    $timeRemaining = max(0, $item->time_end - time());
+                    
+                    $items[] = [
+                        'building' => $object->machine_name,
+                        'level' => $item->object_level_target,
+                        'is_building' => (bool)$item->building,
+                        'time_remaining_seconds' => $timeRemaining,
+                    ];
+                } catch (\Exception $e) {
+                    // Object not found, skip
+                }
+            }
+        } catch (\Exception $e) {
+            // Error getting queue items
+        }
+        
+        return $items;
+    }
+
+    /**
+     * Get unit queue items with details (includes both ships and defense)
+     */
+    protected function getUnitQueueItems(PlanetService $planet): array
+    {
+        $items = [];
+        
+        try {
+            $queueItems = \DB::table('unit_queues')
+                ->where('planet_id', $planet->getPlanetId())
+                ->where('processed', 0)
+                ->orderBy('time_start', 'asc')
+                ->get();
+            
+            // Get defense object IDs to distinguish ships from defense
+            $defenseObjectIds = array_column(\OGame\Services\ObjectService::getDefenseObjects(), 'id');
+            
+            foreach ($queueItems as $item) {
+                try {
+                    $object = \OGame\Services\ObjectService::getObjectById($item->object_id);
+                    $timeRemaining = max(0, $item->time_end - time());
+                    $remaining = $item->object_amount - ($item->object_amount_progress ?? 0);
+                    
+                    // Determine if this is a defense structure or a ship
+                    $isDefense = in_array($item->object_id, $defenseObjectIds);
+                    
+                    $items[] = [
+                        'unit' => $object->machine_name,
+                        'type' => $isDefense ? 'defense' : 'ship',
+                        'quantity' => $item->object_amount,
+                        'remaining' => $remaining,
+                        'time_remaining_seconds' => $timeRemaining,
+                    ];
+                } catch (\Exception $e) {
+                    // Object not found, skip
+                }
+            }
+        } catch (\Exception $e) {
+            // Error getting queue items
+        }
+        
+        return $items;
+    }
+
+    /**
+     * Get research queue items with details
+     */
+    protected function getResearchQueueItems(PlayerService $player): array
+    {
+        $items = [];
+        
+        try {
+            $queueItems = \DB::table('research_queues')
+                ->join('planets', 'research_queues.planet_id', '=', 'planets.id')
+                ->where('planets.user_id', $player->getId())
+                ->where('research_queues.processed', 0)
+                ->where('research_queues.canceled', 0)
+                ->select('research_queues.*')
+                ->orderBy('research_queues.time_start', 'asc')
+                ->get();
+            
+            foreach ($queueItems as $item) {
+                try {
+                    $object = \OGame\Services\ObjectService::getResearchObjectById($item->object_id);
+                    $timeRemaining = max(0, $item->time_end - time());
+                    
+                    $items[] = [
+                        'technology' => $object->machine_name,
+                        'level' => $item->object_level_target,
+                        'planet_id' => $item->planet_id,
+                        'is_building' => (bool)$item->building,
+                        'time_remaining_seconds' => $timeRemaining,
+                    ];
+                } catch (\Exception $e) {
+                    // Object not found, skip
+                }
+            }
+        } catch (\Exception $e) {
+            // Error getting queue items
+        }
+        
+        return $items;
     }
 }

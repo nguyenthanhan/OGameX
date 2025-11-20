@@ -179,7 +179,7 @@ class ResourceCostProvider
                 // No prerequisites
             ],
             'robot_factory' => [
-                // No prerequisites (but called robotics_factory in some contexts)
+                // No prerequisites
             ],
             'alliance_depot' => [
                 // No prerequisites

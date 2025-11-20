@@ -360,7 +360,7 @@ class BotAIService
         
         // 4. AVAILABLE ACTIONS - What you can do
         $sections[] = "=== AVAILABLE ACTIONS ===\n" .
-            "BUILD_BUILDING: metal_mine, crystal_mine, deuterium_synthesizer, solar_plant, fusion_plant, metal_store, crystal_store, deuterium_store, research_lab, robotics_factory, shipyard, missile_silo, nanite_factory\n\n" .
+            "BUILD_BUILDING: metal_mine, crystal_mine, deuterium_synthesizer, solar_plant, fusion_plant, metal_store, crystal_store, deuterium_store, research_lab, robot_factory, shipyard, missile_silo, nano_factory\n\n" .
             "START_RESEARCH: energy_technology, combustion_drive, laser_technology, weapon_technology, shielding_technology, armor_technology, computer_technology, espionage_technology, astrophysics (requires research_lab)\n\n" .
             "BUILD_UNITS: light_fighter, heavy_fighter, cruiser, small_cargo, large_cargo, espionage_probe, rocket_launcher, light_laser (requires shipyard for ships)";
         
@@ -492,7 +492,7 @@ class BotAIService
         
         // Building prerequisites (key buildings only)
         $section .= "BUILDINGS:\n";
-        $keyBuildings = ['shipyard', 'missile_silo', 'nanite_factory', 'terraformer', 'space_dock'];
+        $keyBuildings = ['shipyard', 'missile_silo', 'nano_factory', 'terraformer', 'space_dock'];
         $allBuildings = [...\OGame\Services\ObjectService::getBuildingObjects(), 
                          ...\OGame\Services\ObjectService::getStationObjects()];
         
@@ -969,7 +969,30 @@ class BotAIService
                 $prompt .= " ({$planet['build_queue_count']} items in queue)";
             }
             $prompt .= "\n";
-            $prompt .= "    unit_queue_busy: " . ($planet['unit_queue_busy'] ? 'true' : 'false') . "\n";
+            
+            // Show building queue items if any
+            if (!empty($planet['build_queue_items'])) {
+                foreach ($planet['build_queue_items'] as $item) {
+                    $status = $item['is_building'] ? 'BUILDING' : 'QUEUED';
+                    $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
+                    $prompt .= "      → {$item['building']} level {$item['level']} ({$status}, {$timeRemaining} remaining)\n";
+                }
+            }
+            
+            $prompt .= "    unit_queue_busy: " . ($planet['unit_queue_busy'] ? 'true' : 'false');
+            if (!empty($planet['unit_queue_items'])) {
+                $prompt .= " (" . count($planet['unit_queue_items']) . " items)";
+            }
+            $prompt .= "\n";
+            
+            // Show unit queue items if any (includes both ships and defense)
+            if (!empty($planet['unit_queue_items'])) {
+                foreach ($planet['unit_queue_items'] as $item) {
+                    $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
+                    $typeLabel = ($item['type'] ?? 'ship') === 'defense' ? '[DEFENSE]' : '[SHIP]';
+                    $prompt .= "      → {$typeLabel} {$item['unit']} x{$item['quantity']} ({$item['remaining']} remaining, {$timeRemaining} remaining)\n";
+                }
+            }
             
             // Check for shipyard
             $hasShipyard = false;
@@ -986,25 +1009,25 @@ class BotAIService
             // Check for robotics factory (affects build speed)
             $roboticsLevel = 0;
             foreach ($planet['buildings'] ?? [] as $building) {
-                if ($building['type'] === 'robotics_factory') {
+                if ($building['type'] === 'robot_factory') {
                     $roboticsLevel = $building['level'];
                     break;
                 }
             }
             if ($roboticsLevel > 0) {
-                $prompt .= "    robotics_factory_level: {$roboticsLevel} (faster building)\n";
+                $prompt .= "    robot_factory_level: {$roboticsLevel} (faster building)\n";
             }
             
             // Check for nanite factory (much faster building)
             $naniteLevel = 0;
             foreach ($planet['buildings'] ?? [] as $building) {
-                if ($building['type'] === 'nanite_factory') {
+                if ($building['type'] === 'nano_factory') {
                     $naniteLevel = $building['level'];
                     break;
                 }
             }
             if ($naniteLevel > 0) {
-                $prompt .= "    nanite_factory_level: {$naniteLevel} (very fast building)\n";
+                $prompt .= "    nano_factory_level: {$naniteLevel} (very fast building)\n";
             }
             
             // Buildings
@@ -1038,7 +1061,20 @@ class BotAIService
         
         // RESEARCH
         $prompt .= "RESEARCH:\n";
-        $prompt .= "  research_queue_busy: " . ($gameState['research']['research_queue_busy'] ? 'true' : 'false') . "\n";
+        $prompt .= "  research_queue_busy: " . ($gameState['research']['research_queue_busy'] ? 'true' : 'false');
+        if (!empty($gameState['research']['research_queue_items'])) {
+            $prompt .= " (" . count($gameState['research']['research_queue_items']) . " items)";
+        }
+        $prompt .= "\n";
+        
+        // Show research queue items if any
+        if (!empty($gameState['research']['research_queue_items'])) {
+            foreach ($gameState['research']['research_queue_items'] as $item) {
+                $status = $item['is_building'] ? 'BUILDING' : 'QUEUED';
+                $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
+                $prompt .= "    → {$item['technology']} level {$item['level']} on planet {$item['planet_id']} ({$status}, {$timeRemaining} remaining)\n";
+            }
+        }
         
         // Check research lab
         $hasResearchLab = false;
@@ -1700,6 +1736,24 @@ class BotAIService
         } catch (\Exception $e) {
             // Don't fail if logging fails
             Log::warning("Failed to write response to file: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Format time remaining in human-readable format
+     */
+    protected function formatTimeRemaining(int $seconds): string
+    {
+        if ($seconds < 60) {
+            return "{$seconds}s";
+        } elseif ($seconds < 3600) {
+            $minutes = floor($seconds / 60);
+            $secs = $seconds % 60;
+            return "{$minutes}m {$secs}s";
+        } else {
+            $hours = floor($seconds / 3600);
+            $minutes = floor(($seconds % 3600) / 60);
+            return "{$hours}h {$minutes}m";
         }
     }
 

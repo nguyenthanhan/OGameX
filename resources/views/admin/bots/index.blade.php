@@ -33,7 +33,7 @@
                             <td style="padding: 8px 0; text-align: center;">
                                 <span style="background: #354a5d; padding: 3px 8px; border-radius: 3px;">
                                     @php
-                                        $skillMap = [3 => 'Beginner', 5 => 'Intermediate', 8 => 'Advanced'];
+                                        $skillMap = [3 => 'Beginner', 5 => 'Intermediate', 8 => 'Advanced', 10 => 'Expert'];
                                         echo $skillMap[$bot->bot_skill_level] ?? 'N/A';
                                     @endphp
                                 </span>

@@ -52,7 +52,7 @@ class BotController extends Controller
             'password' => 'required|string|min:6|max:100',
             'bot_ai_config_model' => 'required|string',
             'backup_bot_ai_config_model' => 'nullable|string',
-            'bot_skill_level' => 'required|in:beginner,intermediate,advanced',
+            'bot_skill_level' => 'required|in:beginner,intermediate,advanced,expert',
             'bot_strategy' => 'required|in:aggressive,balanced,defensive',
             'bot_enabled' => 'boolean',
             'bot_notes' => 'nullable|string|max:1000',
@@ -78,6 +78,7 @@ class BotController extends Controller
             'beginner' => 3,
             'intermediate' => 5,
             'advanced' => 8,
+            'expert' => 10,
         ];
         $skillLevel = $skillLevelMap[$validated['bot_skill_level']] ?? 5;
 
@@ -139,7 +140,7 @@ class BotController extends Controller
         $validated = $request->validate([
             'bot_ai_config_model' => 'required|string',
             'backup_bot_ai_config_model' => 'nullable|string',
-            'bot_skill_level' => 'required|in:beginner,intermediate,advanced',
+            'bot_skill_level' => 'required|in:beginner,intermediate,advanced,expert',
             'bot_strategy' => 'required|in:aggressive,balanced,defensive',
             'bot_enabled' => 'boolean',
             'bot_notes' => 'nullable|string|max:1000',
@@ -165,6 +166,7 @@ class BotController extends Controller
             'beginner' => 3,
             'intermediate' => 5,
             'advanced' => 8,
+            'expert' => 10,
         ];
         $validated['bot_skill_level'] = $skillLevelMap[$validated['bot_skill_level']] ?? 5;
 

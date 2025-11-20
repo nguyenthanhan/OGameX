@@ -94,12 +94,13 @@
                         <td style="padding: 10px;">
                             <select name="bot_skill_level" required style="width: 100%; padding: 5px;">
                                 @php
-                                    $skillLevelMap = [3 => 'beginner', 5 => 'intermediate', 8 => 'advanced'];
+                                    $skillLevelMap = [3 => 'beginner', 5 => 'intermediate', 8 => 'advanced', 10 => 'expert'];
                                     $currentSkillLevel = $skillLevelMap[$bot->bot_skill_level] ?? 'intermediate';
                                 @endphp
-                                <option value="beginner" {{ $currentSkillLevel == 'beginner' ? 'selected' : '' }}>Beginner</option>
-                                <option value="intermediate" {{ $currentSkillLevel == 'intermediate' ? 'selected' : '' }}>Intermediate</option>
-                                <option value="advanced" {{ $currentSkillLevel == 'advanced' ? 'selected' : '' }}>Advanced</option>
+                                <option value="beginner" {{ $currentSkillLevel == 'beginner' ? 'selected' : '' }}>Beginner (3/10)</option>
+                                <option value="intermediate" {{ $currentSkillLevel == 'intermediate' ? 'selected' : '' }}>Intermediate (5/10)</option>
+                                <option value="advanced" {{ $currentSkillLevel == 'advanced' ? 'selected' : '' }}>Advanced (8/10)</option>
+                                <option value="expert" {{ $currentSkillLevel == 'expert' ? 'selected' : '' }}>Expert (10/10)</option>
                             </select>
                         </td>
                     </tr>
