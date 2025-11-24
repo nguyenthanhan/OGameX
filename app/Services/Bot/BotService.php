@@ -24,6 +24,14 @@ class BotService
         protected PlanetServiceFactory $planetFactory
     ) {}
 
+    /**
+     * Get bot log channel
+     */
+    protected function botLog()
+    {
+        return Log::channel('bot');
+    }
+
     public function createBot(string $username, int $skillLevel, string $strategy, ?int $botAiConfigId = null): User
     {
         if ($skillLevel < 1 || $skillLevel > 10) {
@@ -53,13 +61,13 @@ class BotService
         try {
             $playerService = resolve(PlayerService::class, ['player_id' => $bot->id]);
             $homePlanet = $this->planetFactory->createInitialPlanetForPlayer($playerService, 'Homeworld');
-            Log::info("Bot {$bot->id} ({$username}) created with planet {$homePlanet->getPlanetId()}");
+            $this->botLog()->info("Bot {$bot->id} ({$username}) created with planet {$homePlanet->getPlanetId()}");
         } catch (Exception $e) {
-            Log::error("Failed to create planet for bot {$bot->id}: " . $e->getMessage());
+            $this->botLog()->error("Failed to create planet for bot {$bot->id}: " . $e->getMessage());
             // Don't fail bot creation, planet can be created manually
         }
 
-        Log::info("Bot created: {$username}, strategy: {$strategy}, skill: {$skillLevel}");
+        $this->botLog()->info("Bot created: {$username}, strategy: {$strategy}, skill: {$skillLevel}");
         return $bot;
     }
 
@@ -81,7 +89,7 @@ class BotService
             ->get();
 
         foreach ($staleBots as $staleBot) {
-            Log::alert("Orphaned lock detected on bot {$staleBot->id}, clearing");
+            $this->botLog()->alert("Orphaned lock detected on bot {$staleBot->id}, clearing");
             DB::table('users')->where('id', $staleBot->id)->update(['bot_processing_until' => null]);
             $staleLocksCleared++;
         }
@@ -113,7 +121,7 @@ class BotService
                 $processed++;
             } catch (Exception $e) {
                 // Log to Laravel log
-                Log::error("Bot {$botId} failed: " . $e->getMessage(), [
+                $this->botLog()->error("Bot {$botId} failed: " . $e->getMessage(), [
                     'exception' => get_class($e),
                     'trace' => $e->getTraceAsString(),
                 ]);
@@ -149,7 +157,7 @@ class BotService
         $turnId = Str::uuid();
         
         // Log turn start
-        $this->logToFile($bot->id, "🎮 TURN STARTED", "Turn ID: {$turnId}");
+        $this->logToFile($bot->id, "🎮 TURN STARTED", "Turn ID: {$turnId}", $turnId);
 
         try {
             // Collect game state
@@ -163,11 +171,15 @@ class BotService
             
             // Log decision with details
             $strategy = $decision['overall_strategy'] ?? 'No strategy provided';
-            Log::info("Bot {$bot->id} turn {$turnId}: {$strategy}", [
-                'actions' => count($decision['actions']),
-                'action_types' => array_column($decision['actions'], 'action_type'),
-                'tokens_used' => $decision['_metadata']['tokens_used'] ?? null,
-                'cost_usd' => $decision['_metadata']['cost'] ?? null,
+            $actionCount = count($decision['actions']);
+            $actionTypes = array_column($decision['actions'], 'action_type');
+            $tokensUsed = $decision['_metadata']['tokens_used'] ?? null;
+            $costUsd = $decision['_metadata']['cost'] ?? null;
+            $this->botLog()->info("[TURN_DECISION] Bot:{$bot->id} Turn:{$turnId} Actions:{$actionCount} Types:" . implode(',', $actionTypes) . " Tokens:{$tokensUsed} Cost:$" . ($costUsd ?? 0) . " | Bot {$bot->id} turn {$turnId}: {$strategy}", [
+                'actions' => $actionCount,
+                'action_types' => $actionTypes,
+                'tokens_used' => $tokensUsed,
+                'cost_usd' => $costUsd,
             ]);
             
             // Log decisions to bot_decisions_active (before execution)
@@ -185,7 +197,6 @@ class BotService
                     'quantity' => $action['quantity'] ?? null,
                     'overall_strategy' => $decision['overall_strategy'] ?? 'No strategy provided',
                     'result' => 'pending', // Will be updated after execution
-                    'tokens_used' => $decision['_metadata']['tokens_used'] ?? null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -200,21 +211,24 @@ class BotService
             // Log execution results
             $this->logToFile($bot->id, "📊 EXECUTION RESULTS", 
                 "Success: {$successCount}, Failed: {$failedCount}\n" .
-                "Actions:\n" . $this->formatExecutionResults($executionResults)
+                "Actions:\n" . $this->formatExecutionResults($executionResults),
+                $turnId
             );
             
             $bot->update(['bot_last_heartbeat' => now()]);
             
-            $this->logToFile($bot->id, "✅ TURN COMPLETED", "Turn ID: {$turnId}");
+            $this->logToFile($bot->id, "✅ TURN COMPLETED", "Turn ID: {$turnId}", $turnId);
             
-            Log::info("Bot {$bot->id} turn {$turnId} completed: {$successCount} success, {$failedCount} failed");
+            $this->botLog()->info("[TURN_COMPLETE] Bot:{$bot->id} Turn:{$turnId} Success:{$successCount} Failed:{$failedCount} | Bot {$bot->id} turn {$turnId} completed: {$successCount} success, {$failedCount} failed");
             
         } catch (Exception $e) {
             $this->logToFile($bot->id, "❌ TURN FAILED", 
                 "Turn ID: {$turnId}\n" .
-                "Error: " . $e->getMessage()
+                "Error: " . $e->getMessage(),
+                $turnId
             );
-            Log::error("Bot {$bot->id} turn {$turnId} failed: " . $e->getMessage());
+            $errorMsg = str_replace([' ', "\n"], ['_', ''], substr($e->getMessage(), 0, 50));
+            $this->botLog()->error("[TURN_FAILED] Bot:{$bot->id} Turn:{$turnId} Error:{$errorMsg} | Bot {$bot->id} turn {$turnId} failed: " . $e->getMessage());
             throw $e;
         }
     }
@@ -222,7 +236,7 @@ class BotService
     /**
      * Write to bot's daily log file
      */
-    private function logToFile(int $botId, string $title, string $content): void
+    private function logToFile(int $botId, string $title, string $content, ?string $turnId = null): void
     {
         try {
             $date = date('Y-m-d');
@@ -235,7 +249,24 @@ class BotService
             
             $logFile = "{$logDir}/{$date}.log";
             
+            // Map title to searchable tag
+            $tagMap = [
+                '🎮 TURN STARTED' => 'TURN_START',
+                '✅ TURN COMPLETED' => 'TURN_COMPLETE',
+                '❌ TURN FAILED' => 'TURN_FAILED',
+                '📊 EXECUTION RESULTS' => 'EXECUTION_RESULTS',
+            ];
+            $tag = $tagMap[$title] ?? 'LOG';
+            
+            // Build searchable header line
+            $searchableLine = "[{$tag}] [{$timestamp}] Bot:{$botId}";
+            if ($turnId) {
+                $searchableLine .= " Turn:{$turnId}";
+            }
+            
             $logContent = str_repeat('=', 100) . "\n";
+            $logContent .= "{$searchableLine}\n";
+            $logContent .= str_repeat('=', 100) . "\n";
             $logContent .= "{$title} [{$timestamp}]\n";
             $logContent .= str_repeat('=', 100) . "\n";
             $logContent .= $content . "\n\n";
@@ -255,7 +286,27 @@ class BotService
         foreach ($results as $result) {
             $status = $result['result']['success'] ? '✅' : '❌';
             $action = $result['action'];
-            $output .= "  {$status} {$action['action_type']} → {$action['target']}";
+            $actionType = $action['action_type'] ?? 'UNKNOWN';
+            $target = $action['target'] ?? 'N/A';
+            $planetId = $action['planet_id'] ?? null;
+            
+            // Add searchable tag line
+            $tag = $result['result']['success'] ? 'ACTION_SUCCESS' : 'ACTION_FAILED';
+            $searchableLine = "[{$tag}] Type:{$actionType} Target:{$target}";
+            if ($planetId) {
+                $searchableLine .= " Planet:{$planetId}";
+            }
+            if (!$result['result']['success']) {
+                $error = $result['result']['error'] ?? 'Unknown error';
+                $searchableLine .= " Error:" . str_replace([' ', "\n"], ['_', ''], substr($error, 0, 50));
+            }
+            
+            $output .= "{$searchableLine}\n";
+            $output .= "  {$status} {$actionType} → {$target}";
+            
+            if ($planetId) {
+                $output .= " (Planet: {$planetId})";
+            }
             
             if (!$result['result']['success']) {
                 $output .= " (Error: {$result['result']['error']})";
@@ -363,7 +414,7 @@ class BotService
             
             // If force delete, cancel all active fleet missions first
             if ($force && $activeFleets->isNotEmpty()) {
-                Log::warning("Force deleting bot {$botId}: Canceling {$activeFleets->count()} active fleet missions");
+                $this->botLog()->warning("Force deleting bot {$botId}: Canceling {$activeFleets->count()} active fleet missions");
                 
                 foreach ($activeFleets as $fleet) {
                     // Mark fleet as canceled
@@ -435,13 +486,13 @@ class BotService
             
             DB::commit();
             
-            Log::info("Bot {$botId} ({$bot->username}) successfully deleted");
+            $this->botLog()->info("Bot {$botId} ({$bot->username}) successfully deleted");
             
             return true;
             
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("Failed to delete bot {$botId}: " . $e->getMessage());
+            $this->botLog()->error("Failed to delete bot {$botId}: " . $e->getMessage());
             throw new Exception("Failed to delete bot: " . $e->getMessage());
         }
     }

@@ -59,12 +59,12 @@ class BotGameStateCollector
                 $planet->update();
             } catch (\DivisionByZeroError $e) {
                 // Log error but continue with other planets
-                \Log::warning("Bot GameStateCollector: Division by zero error on planet {$planet->getPlanetId()}: " . $e->getMessage());
+                \Log::channel('bot')->warning("Bot GameStateCollector: Division by zero error on planet {$planet->getPlanetId()}: " . $e->getMessage());
                 // Continue to next planet
                 continue;
             } catch (\Exception $e) {
                 // Log other errors but continue
-                \Log::warning("Bot GameStateCollector: Error updating planet {$planet->getPlanetId()}: " . $e->getMessage());
+                \Log::channel('bot')->warning("Bot GameStateCollector: Error updating planet {$planet->getPlanetId()}: " . $e->getMessage());
                 continue;
             }
             
@@ -75,6 +75,10 @@ class BotGameStateCollector
                 'planet_id' => $planet->getPlanetId(),
                 'coordinates' => $planet->getPlanetCoordinates(),
                 'name' => $planet->getPlanetName(),
+                
+                // Planet properties
+                'diameter' => $planet->getPlanetDiameter(),
+                'field_max' => $planet->getPlanetFieldMax(),
                 
                 // Resources
                 'metal_stored' => (int)$planet->metal()->get(),

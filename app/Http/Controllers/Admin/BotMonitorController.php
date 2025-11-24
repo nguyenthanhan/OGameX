@@ -34,14 +34,13 @@ class BotMonitorController extends Controller
                 ->where('created_at', '>=', now()->startOfDay())
                 ->count();
 
-            // Success rate (last 10 decisions)
-            $recent = DB::table('bot_decisions_active')
+            // Success rate (today only)
+            $todayDecisions = DB::table('bot_decisions_active')
                 ->where('user_id', $bot->id)
-                ->orderBy('created_at', 'desc')
-                ->limit(10)
+                ->where('created_at', '>=', now()->startOfDay())
                 ->get();
-            $bot->success_count = $recent->where('result', 'success')->count();
-            $bot->total_recent = $recent->count();
+            $bot->success_count = $todayDecisions->where('result', 'success')->count();
+            $bot->total_recent = $todayDecisions->count();
         }
 
         return view('admin.bot-monitor.dashboard', compact('bots'));
@@ -219,8 +218,6 @@ class BotMonitorController extends Controller
                                 $model = $m[1];
                             }
                             if (preg_match('/"total":(\d+)/', $line, $m)) {
-                                $tokens = $m[1];
-                            } elseif (preg_match('/"tokens_used":(\d+)/', $line, $m)) {
                                 $tokens = $m[1];
                             }
                             if (preg_match('/"cost_usd":([\d.]+)/', $line, $m)) {

@@ -20,11 +20,10 @@
             <table class="tablesorter" style="width: 100%; table-layout: fixed; text-align: center;">
                 <thead>
                     <tr>
-                        <th style="width: 20%;">Bot Name</th>
-                        <th style="width: 15%;">Status</th>
-                        <th style="width: 18%;">Last Decision</th>
-                        <th style="width: 12%;">Today</th>
-                        <th style="width: 15%;">Success Rate</th>
+                        <th style="width: 22%;">Bot Name</th>
+                        <th style="width: 18%;">Status</th>
+                        <th style="width: 20%;">Last Decision</th>
+                        <th style="width: 20%;">Success Rate</th>
                         <th style="width: 20%;">Actions</th>
                     </tr>
                 </thead>
@@ -64,12 +63,6 @@
                                 @endif
                             </td>
 
-                            <!-- Decisions Today -->
-                            <td style="padding: 5px 0;">
-                                <strong>{{ $bot->decisions_today }}</strong><br>
-                                <small style="color: #999;">actions</small>
-                            </td>
-
                             <!-- Success Rate -->
                             <td style="padding: 5px 0;">
                                 @if($bot->total_recent > 0)
@@ -90,7 +83,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" style="text-align: center; padding: 15px;">
+                            <td colspan="5" style="text-align: center; padding: 15px;">
                                 No bots found. <a href="{{ route('admin.bots.create') }}">Create one</a>
                             </td>
                         </tr>

@@ -14,16 +14,24 @@ class ProcessBotTurnsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * Get bot log channel
+     */
+    protected function botLog()
+    {
+        return Log::channel('bot');
+    }
+
     public function handle(BotService $botService): void
     {
         if (!config('ogame.bots.enabled', true)) {
-            Log::info('Bot system disabled, skipping processing');
+            $this->botLog()->info('Bot system disabled, skipping processing');
             return;
         }
 
         $result = $botService->processAllBots();
 
-        Log::info('Bot processing completed', [
+        $this->botLog()->info('Bot processing completed', [
             'processed' => $result['processed'],
             'errors' => count($result['errors']),
             'stale_locks_cleared' => $result['stale_locks_cleared'],

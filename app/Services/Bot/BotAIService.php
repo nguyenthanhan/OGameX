@@ -19,6 +19,14 @@ class BotAIService
     ) {}
 
     /**
+     * Get bot log channel
+     */
+    protected function botLog()
+    {
+        return Log::channel('bot');
+    }
+
+    /**
      * Get AI decision for bot's turn
      * Requires AI configuration - no fallback
      */
@@ -26,13 +34,13 @@ class BotAIService
     {
         // Load bot's AI config - REQUIRED
         if (!$bot->bot_ai_config_id) {
-            Log::error("Bot {$bot->id} has no AI config assigned");
+            $this->botLog()->error("Bot {$bot->id} has no AI config assigned");
             throw new \Exception("Bot must have an AI configuration assigned");
         }
 
         $config = BotAiConfig::find($bot->bot_ai_config_id);
         if (!$config || !$config->is_active) {
-            Log::error("Bot {$bot->id} AI config not found or inactive");
+            $this->botLog()->error("Bot {$bot->id} AI config not found or inactive");
             throw new \Exception("Bot AI configuration not found or inactive");
         }
 
@@ -43,7 +51,7 @@ class BotAIService
         try {
             $this->quotaService->checkQuota($bot);
         } catch (QuotaExceededException $e) {
-            Log::warning("Bot {$bot->id} quota exceeded: " . $e->getMessage());
+            $this->botLog()->warning("Bot {$bot->id} quota exceeded: " . $e->getMessage());
             // Log to bot file for visibility
             $this->logQuotaExceeded($bot->id, $e->getMessage());
             return ['actions' => [], 'overall_strategy' => 'Quota exceeded'];
@@ -72,7 +80,7 @@ class BotAIService
             return $decision;
         } catch (Exception $primaryException) {
             $primaryError = $primaryException->getMessage();
-            Log::warning("Bot {$bot->id} primary AI provider failed: {$primaryError}");
+            $this->botLog()->warning("Bot {$bot->id} primary AI provider failed: {$primaryError}");
             
             // Check if backup provider is configured
             if ($bot->backup_bot_ai_config_id) {
@@ -86,7 +94,7 @@ class BotAIService
                     }
                     
                     if ($backupModel) {
-                        Log::info("Bot {$bot->id} switching to backup AI provider (config: {$backupConfig->id}, model: {$backupModel})");
+                        $this->botLog()->info("[BACKUP_SWITCH] Bot:{$bot->id} ConfigId:{$backupConfig->id} Model:{$backupModel} | Bot {$bot->id} switching to backup AI provider (config: {$backupConfig->id}, model: {$backupModel})");
                         
                         // Log backup provider attempt to bot file
                         $this->writeBackupProviderSwitch($bot->id, $backupModel, $primaryError);
@@ -100,14 +108,14 @@ class BotAIService
                             return $decision;
                         } catch (Exception $backupException) {
                             $backupError = $backupException->getMessage();
-                            Log::error("Bot {$bot->id} backup AI provider also failed: {$backupError}");
+                            $this->botLog()->error("Bot {$bot->id} backup AI provider also failed: {$backupError}");
                             throw new \Exception("Both primary and backup AI providers failed. Primary: {$primaryError}. Backup: {$backupError}");
                         }
                     } else {
-                        Log::error("Bot {$bot->id} backup config has no model configured");
+                        $this->botLog()->error("Bot {$bot->id} backup config has no model configured");
                     }
                 } else {
-                    Log::warning("Bot {$bot->id} backup config not found or inactive (config_id: {$bot->backup_bot_ai_config_id})");
+                    $this->botLog()->warning("Bot {$bot->id} backup config not found or inactive (config_id: {$bot->backup_bot_ai_config_id})");
                 }
             }
             
@@ -135,7 +143,7 @@ class BotAIService
         for ($attempt = 0; $attempt <= $maxRetries; $attempt++) {
             try {
                 if ($attempt > 0) {
-                    Log::info("Bot {$botId} {$providerType} provider retry attempt {$attempt}/{$maxRetries}");
+                    $this->botLog()->info("[API_RETRY] Bot:{$botId} Provider:{$providerType} Attempt:{$attempt}/{$maxRetries} | Bot {$botId} {$providerType} provider retry attempt {$attempt}/{$maxRetries}");
                 }
                 
                 $response = $this->callAPI($botId, $config->bot_ai_url, $config->bot_ai_api_key, $model, $messages);
@@ -153,7 +161,7 @@ class BotAIService
                     // Validate decision structure
                     if (!is_array($decision) || !isset($decision['actions'])) {
                         $lastError = "Invalid decision format from AI";
-                        Log::error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}", [
+                        $this->botLog()->error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}", [
                             'raw_response' => $rawContent,
                             'cleaned_response' => $cleanedContent
                         ]);
@@ -169,7 +177,7 @@ class BotAIService
                 } else {
                     // API call failed - log the error with raw response if available
                     $lastError = $response['error'] ?? 'API call failed';
-                    Log::error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}", [
+                    $this->botLog()->error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}", [
                         'raw_response' => $response['raw_response'] ?? null,
                     ]);
                     
@@ -184,7 +192,7 @@ class BotAIService
                 }
             } catch (Exception $e) {
                 $lastError = $e->getMessage();
-                Log::error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}");
+                $this->botLog()->error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}");
                 
                 if ($attempt < $maxRetries) {
                     sleep(pow(2, $attempt)); // Exponential backoff
@@ -193,7 +201,7 @@ class BotAIService
         }
 
         // All retries failed - throw exception with last error
-        Log::error("Bot {$botId} {$providerType} provider all retries failed. Last error: {$lastError}");
+        $this->botLog()->error("Bot {$botId} {$providerType} provider all retries failed. Last error: {$lastError}");
         throw new \Exception("{$providerType} AI provider failed after {$maxRetries} retries: {$lastError}");
     }
 
@@ -362,7 +370,7 @@ class BotAIService
         $sections[] = "=== AVAILABLE ACTIONS ===\n" .
             "BUILD_BUILDING: metal_mine, crystal_mine, deuterium_synthesizer, solar_plant, fusion_plant, metal_store, crystal_store, deuterium_store, research_lab, robot_factory, shipyard, missile_silo, nano_factory\n\n" .
             "START_RESEARCH: energy_technology, combustion_drive, laser_technology, weapon_technology, shielding_technology, armor_technology, computer_technology, espionage_technology, astrophysics (requires research_lab)\n\n" .
-            "BUILD_UNITS: light_fighter, heavy_fighter, cruiser, small_cargo, large_cargo, espionage_probe, rocket_launcher, light_laser (requires shipyard for ships)";
+            "BUILD_UNITS: light_fighter, heavy_fighter, cruiser, small_cargo, large_cargo, espionage_probe, rocket_launcher, light_laser, small_shield_dome, large_shield_dome (requires shipyard for ships, missile_silo for shield domes)";
         
         // 5. RESOURCE COSTS - What things cost
         $sections[] = $this->buildResourceCostsSection();
@@ -387,7 +395,9 @@ class BotAIService
             "   - FALLBACK 3: If not affordable, return empty actions and wait for resources\n" .
             "   - NOTE: Check affordability by comparing solar_plant cost (75M, 30C) vs available resources\n" .
             "   - IMPORTANT: If you see GAME STATE ALERTS about energy deficit, this MUST be your TOP PRIORITY\n" .
-            "   - Energy deficit warnings mean production is being wasted - fix energy FIRST before other actions\n\n" .
+            "   - Energy deficit warnings mean production is being wasted - fix energy FIRST before other actions\n" .
+            "   - DO NOT build solar_satellite for general energy needs - it's fragile and can be destroyed in battle\n" .
+            "   - Solar Plant and Fusion Reactor are PERMANENT and RELIABLE energy sources - use these instead\n\n" .
             "7. IF any storage > 90% full → HIGH PRIORITY (MAXIMIZE ACTIONS):\n" .
             "   - CRITICAL: Use MULTIPLE actions to spend resources efficiently\n" .
             "   - PRIORITY 1 (SPEND): Spend excess resources through MULTIPLE actions:\n" .
@@ -407,7 +417,68 @@ class BotAIService
             "   - Calculate cost for target level using formula: base_cost × factor^(level-1)\n" .
             "   - Compare against available resources on planet\n" .
             "   - If not affordable, skip this action and try alternatives\n\n" .
-            "9. CHECK prerequisites: Only propose actions where requirements are met\n" .
+            "8a. BUILDING PRIORITY RULE (IMPORTANCE AND EFFICIENCY):\n" .
+            "   - When proposing BUILD_BUILDING, prioritize buildings that are IMPORTANT, LOW COST, and SHORT BUILD TIME\n" .
+            "   - CRITICAL BUILDINGS (always prioritize when needed):\n" .
+            "     * solar_plant - CRITICAL for energy (low cost: 75M, 30C, fast build time)\n" .
+            "     * fusion_plant - CRITICAL for energy (higher cost but more efficient at high levels, especially with energy_technology)\n" .
+            "     * metal_mine, crystal_mine, deuterium_synthesizer - CRITICAL for resource production (but check energy first!)\n" .
+            "     * research_lab - CRITICAL for research (enables all research)\n" .
+            "   - IMPORTANT BUILDINGS (prioritize when affordable):\n" .
+            "     * storage buildings (metal_store, crystal_store, deuterium_store) - Important when storage > 90%\n" .
+            "     * shipyard - Important for building ships\n" .
+            "     * robot_factory - Speeds up building (useful but not critical)\n" .
+            "   - AVOID LONG BUILD TIME BUILDINGS when shorter alternatives available:\n" .
+            "     * deuterium_synthesizer level 20+ - Very long build time, high cost\n" .
+            "     * Only build high-level mines when energy is sufficient and other critical buildings are done\n" .
+            "     * If a building takes >2 hours to build, consider if there are more important/urgent buildings to build first\n" .
+            "     * Example: If metal_mine level 15 takes 3h but solar_plant takes 30min → build solar_plant first if energy needed\n" .
+            "   - DECISION LOGIC:\n" .
+            "     * Compare build time: If solar_plant takes 10min but deuterium_synthesizer takes 2h → choose solar_plant\n" .
+            "     * Compare cost: If metal_mine costs 100M but storage costs 1000M → choose metal_mine first\n" .
+            "     * Balance: Build quick, cheap buildings first to maximize progress per unit time\n" .
+            "     * Avoid blocking build queue with very long builds when urgent needs exist\n" .
+            "   - Example: If energy deficit and storage full → prioritize solar_plant (fast, cheap) over high-level mine (slow, expensive)\n\n" .
+            "8c. ENERGY BUILDING BALANCE RULE (SOLAR PLANT vs FUSION REACTOR):\n" .
+            "   - IMPORTANT: Balance Solar Plant and Fusion Reactor levels to optimize energy production\n" .
+            "   - Solar Plant: Cheaper, faster to build, good for early/mid game\n" .
+            "   - Fusion Reactor: More expensive but more efficient at high levels, especially with energy_technology research\n" .
+            "   - BALANCE CHECK: When building energy buildings, check the level difference:\n" .
+            "     * If solar_plant level > fusion_plant level + 5 → PRIORITIZE building fusion_plant\n" .
+            "     * If fusion_plant level > solar_plant level + 5 → PRIORITIZE building solar_plant\n" .
+            "     * Goal: Keep difference within 5 levels (e.g., solar_plant 20, fusion_plant 15-25)\n" .
+            "   - DECISION LOGIC:\n" .
+            "     * Calculate difference: solar_level - fusion_level\n" .
+            "     * If difference > 5: Build fusion_plant (unless energy deficit is critical and solar_plant is faster/cheaper)\n" .
+            "     * If difference < -5: Build solar_plant (unless fusion_plant is more efficient due to high energy_technology)\n" .
+            "     * If difference within ±5: Choose based on cost, build time, and current energy needs\n" .
+            "   - EXAMPLES:\n" .
+            "     * Solar Plant level 29, Fusion Reactor level 4 (difference: +25) → Build Fusion Reactor to balance\n" .
+            "     * Solar Plant level 15, Fusion Reactor level 20 (difference: -5) → Can build Solar Plant or other buildings\n" .
+            "     * Solar Plant level 20, Fusion Reactor level 18 (difference: +2) → Balanced, choose based on other factors\n" .
+            "   - EXCEPTION: If energy deficit is CRITICAL (energy < 0), prioritize the fastest/cheapest option to fix immediately\n" .
+            "   - This balance ensures optimal energy production efficiency and resource usage\n\n" .
+            "8b. SHIELD DOME PRIORITY RULE (DEFENSIVE INFRASTRUCTURE):\n" .
+            "   - Build shield domes on ALL planets when affordable and conditions are met\n" .
+            "   - small_shield_dome: Build when affordable (cost: 10,000M, 10,000C) - provides basic protection\n" .
+            "   - large_shield_dome: Build when affordable (cost: 50,000M, 50,000C) and small_shield_dome exists - provides strong protection\n" .
+            "   - PRIORITY: Build shield domes when:\n" .
+            "     * Resources are available (not blocking critical production buildings)\n" .
+            "     * Build queue is not busy with urgent items\n" .
+            "     * Other critical buildings (mines, energy, storage) are at reasonable levels\n" .
+            "   - Build on ALL planets, not just one - defensive infrastructure is important for all planets\n" .
+            "   - Shield domes protect planets from attacks - important for long-term survival\n\n" .
+            "9. CHECK ENERGY BEFORE BUILDING (CRITICAL - PREVENT ENERGY DEFICIT):\n" .
+            "   - BEFORE proposing BUILD_BUILDING for energy-consuming buildings, calculate future energy balance\n" .
+            "   - Energy-consuming buildings: metal_mine, crystal_mine, deuterium_synthesizer\n" .
+            "   - Energy-producing buildings: solar_plant, fusion_plant\n" .
+            "   - CALCULATION: future_energy = current_energy_available - building_energy_consumption_at_new_level\n" .
+            "   - If future_energy < 0 → DO NOT build that building yet\n" .
+            "   - INSTEAD: Build solar_plant or fusion_plant FIRST to ensure sufficient energy\n" .
+            "   - Only build energy-consuming buildings if energy will remain >= 0 after building\n" .
+            "   - This prevents energy deficit which reduces production by 50%\n" .
+            "   - Example: If building metal_mine level 5 will consume 50E, but only 30E available → Build solar_plant first\n\n" .
+            "10. CHECK prerequisites: Only propose actions where requirements are met\n" .
             "   - BUILD_BUILDING: Verify all required buildings exist at required levels\n" .
             "   - START_RESEARCH: Verify research_lab level and required research completed\n" .
             "   - BUILD_UNITS: CRITICAL - Verify shipyard level AND research levels match requirements\n" .
@@ -416,7 +487,52 @@ class BotAIService
             "     * Check current research levels in Technologies section\n" .
             "     * If shipyard or research level too low, DO NOT propose that unit\n" .
             "   - If prerequisites not met, skip this action\n\n" .
-            "10. IF last turn failed same action → DON'T repeat\n" .
+            "11. RESEARCH PRIORITY RULE (IMPORTANCE + LOW COST + SHORT TIME FIRST):\n" .
+            "   - When proposing START_RESEARCH, prioritize research based on THREE factors in order:\n" .
+            "     1. IMPORTANCE (how critical for game progress)\n" .
+            "     2. LOW RESOURCE COST (affordable with current resources)\n" .
+            "     3. SHORT RESEARCH TIME (quick to complete)\n" .
+            "   - ALWAYS prioritize research that is IMPORTANT + LOW COST + SHORT TIME over expensive/long-time research\n" .
+            "   - CRITICAL RESEARCH (always prioritize when behind - these are important AND usually affordable):\n" .
+            "     * energy_technology - CRITICAL for energy production (fusion_plant efficiency, solar_plant output) - usually low cost, moderate time\n" .
+            "     * computer_technology - CRITICAL for fleet capacity and command center level - usually low cost, moderate time\n" .
+            "     * combustion_drive - CRITICAL for ship speed and cargo capacity - usually low cost, moderate time\n" .
+            "   - IMPORTANT RESEARCH (prioritize when affordable and time is reasonable):\n" .
+            "     * weapon_technology, shielding_technology, armor_technology - Important for combat - usually moderate cost, moderate time\n" .
+            "     * laser_technology - Required for many ships and defenses - usually low cost, short time\n" .
+            "     * espionage_technology - Useful for intelligence gathering - usually low cost, short time\n" .
+            "   - AVOID EXPENSIVE/LONG-TIME RESEARCH when cheaper/faster alternatives exist:\n" .
+            "     * astrophysics - VERY LONG TIME (often 40+ hours), HIGH COST. DO NOT research unless:\n" .
+            "       - ALL critical research (energy/computer/combustion_drive) are at level 10+\n" .
+            "       - ALL important research (weapon/shielding/armor/laser) are at level 8+\n" .
+            "       - You have EXCESS resources (not needed for buildings/other research)\n" .
+            "       - Research queue is EMPTY and no other research is more urgent\n" .
+            "     * graviton_technology - VERY EXPENSIVE (energy cost scales exponentially), VERY LONG TIME\n" .
+            "       - Only research when all other research is complete or at very high levels\n" .
+            "   - DECISION LOGIC (PRIORITIZATION ALGORITHM):\n" .
+            "     * Step 1: Identify all available research options\n" .
+            "     * Step 2: Filter by importance (critical > important > special)\n" .
+            "     * Step 3: Among same importance level, prioritize LOW COST first\n" .
+            "     * Step 4: Among same cost, prioritize SHORT TIME first\n" .
+            "     * Step 5: Compare final candidates - choose the one with best balance of importance/cost/time\n" .
+            "   - EXAMPLES:\n" .
+            "     * If energy_technology level 7 (cost: 50M, 20C, time: 2h) vs astrophysics level 11 (cost: 500M, 200C, time: 45h)\n" .
+            "       → Choose energy_technology (more important, MUCH cheaper, MUCH faster)\n" .
+            "     * If laser_technology level 3 (cost: 30M, 10C, time: 1h) vs weapon_technology level 8 (cost: 200M, 100C, time: 5h)\n" .
+            "       → Choose laser_technology (similar importance, cheaper, faster)\n" .
+            "     * If all critical research level 10+, astrophysics level 11 available (cost: 500M, time: 45h)\n" .
+            "       → Can consider IF resources are abundant AND no other urgent research exists\n" .
+            "   - KEY PRINCIPLE: Research many quick, cheap, important technologies rather than one expensive, long-time research\n" .
+            "   - This maximizes progress per unit time and per unit resource spent\n\n" .
+            "12. SOLAR SATELLITE RULE (SPECIAL CASE):\n" .
+            "   - DO NOT build solar_satellite for general energy production\n" .
+            "   - Solar satellites are FRAGILE and can be destroyed in battle - they are NOT reliable\n" .
+            "   - Use solar_plant or fusion_plant for permanent, reliable energy instead\n" .
+            "   - ONLY build solar_satellite when you need to research graviton_technology\n" .
+            "   - Graviton technology requires 300,000E × 2.0^(level-1) energy\n" .
+            "   - If graviton_technology is affordable but energy insufficient, THEN consider solar_satellite\n" .
+            "   - Otherwise, ALWAYS prioritize solar_plant or fusion_plant for energy needs\n\n" .
+            "13. IF last turn failed same action → DON'T repeat\n" .
             "   - Check last turn summary for failed actions\n" .
             "   - Avoid proposing the exact same action (same type, target, planet)\n" .
             "   - Try alternative actions instead\n\n" .
@@ -460,7 +576,15 @@ class BotAIService
             if ($cost['metal'] > 0) $parts[] = number_format($cost['metal']) . 'M';
             if ($cost['crystal'] > 0) $parts[] = number_format($cost['crystal']) . 'C';
             if ($cost['deuterium'] > 0) $parts[] = number_format($cost['deuterium']) . 'D';
-            $section .= "  {$research}: " . implode(', ', $parts) . "\n";
+            
+            // Special case: graviton_technology only costs Energy (scales by level), not resources
+            // Formula: Energy(level) = 300,000 × 2.0^(level-1)
+            // Level 1: 300,000E, Level 2: 600,000E, Level 3: 1,200,000E, etc.
+            if ($research === 'graviton_technology') {
+                $section .= "  {$research}: Energy only (300,000E base, factor 2.0, no resources)\n";
+            } else {
+                $section .= "  {$research}: " . (empty($parts) ? 'N/A' : implode(', ', $parts)) . "\n";
+            }
         }
         
         $section .= "\nUNITS & SHIPS:\n";
@@ -476,7 +600,20 @@ class BotAIService
         $section .= "\nCOST FORMULA:\n";
         $section .= "Buildings/Research: cost(level) = base_cost × factor^(level-1)\n";
         $section .= "Most buildings use factor 2.0, mines use 1.5-1.6\n";
-        $section .= "Example: metal_mine level 5 = 60M × 1.5^4 = 304M, 76C\n\n";
+        $section .= "Example: metal_mine level 5 = 60M × 1.5^4 = 304M, 76C\n";
+        $section .= "Special: graviton_technology costs Energy only (300,000E × 2.0^(level-1)), no resources\n\n";
+        
+        $section .= "ENERGY CONSUMPTION/PRODUCTION FORMULAS:\n";
+        $section .= "Energy-consuming buildings (negative energy = consumption):\n";
+        $section .= "  - metal_mine: -10 × level × 1.1^level\n";
+        $section .= "  - crystal_mine: -10 × level × 1.1^level\n";
+        $section .= "  - deuterium_synthesizer: -20 × level × 1.1^level\n";
+        $section .= "Energy-producing buildings (positive energy = production):\n";
+        $section .= "  - solar_plant: 20 × level × 1.1^level\n";
+        $section .= "  - fusion_plant: 30 × level × (1.05 + energy_technology_level × 0.01)^level\n";
+        $section .= "IMPORTANT: Before building energy-consuming buildings, calculate:\n";
+        $section .= "  future_energy = current_energy_available - building_energy_consumption_at_new_level\n";
+        $section .= "  If future_energy < 0, build energy-producing buildings FIRST!";
         
         return $section;
     }
@@ -940,6 +1077,8 @@ class BotAIService
             $coords = $planet['coordinates'];
             $coordStr = is_object($coords) ? "{$coords->galaxy}:{$coords->system}:{$coords->position}" : (string)$coords;
             $prompt .= "  Coordinates: {$coordStr}\n";
+            $prompt .= "  Diameter: {$planet['diameter']} km\n";
+            $prompt .= "  Max Fields: {$planet['field_max']}\n";
             
             // Resources with storage info
             $prompt .= "  Resources:\n";
@@ -987,10 +1126,33 @@ class BotAIService
             
             // Show unit queue items if any (includes both ships and defense)
             if (!empty($planet['unit_queue_items'])) {
+                // Separate ships and defense for clarity
+                $ships = [];
+                $defenses = [];
                 foreach ($planet['unit_queue_items'] as $item) {
-                    $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
-                    $typeLabel = ($item['type'] ?? 'ship') === 'defense' ? '[DEFENSE]' : '[SHIP]';
-                    $prompt .= "      → {$typeLabel} {$item['unit']} x{$item['quantity']} ({$item['remaining']} remaining, {$timeRemaining} remaining)\n";
+                    if (($item['type'] ?? 'ship') === 'defense') {
+                        $defenses[] = $item;
+                    } else {
+                        $ships[] = $item;
+                    }
+                }
+                
+                if (!empty($ships)) {
+                    $prompt .= "      Ships in queue:\n";
+                    foreach ($ships as $item) {
+                        $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
+                        $status = $item['remaining'] < $item['quantity'] ? 'BUILDING' : 'QUEUED';
+                        $prompt .= "        → {$item['unit']} x{$item['quantity']} ({$item['remaining']} remaining, {$status}, {$timeRemaining} remaining)\n";
+                    }
+                }
+                
+                if (!empty($defenses)) {
+                    $prompt .= "      Defenses in queue:\n";
+                    foreach ($defenses as $item) {
+                        $timeRemaining = $this->formatTimeRemaining($item['time_remaining_seconds']);
+                        $status = $item['remaining'] < $item['quantity'] ? 'BUILDING' : 'QUEUED';
+                        $prompt .= "        → {$item['unit']} x{$item['quantity']} ({$item['remaining']} remaining, {$status}, {$timeRemaining} remaining)\n";
+                    }
                 }
             }
             
@@ -1114,9 +1276,25 @@ class BotAIService
         }
         
         if (!empty($gameState['fleet']['active_missions'])) {
-            $prompt .= "  Active missions:\n";
+            $prompt .= "  Active missions (" . count($gameState['fleet']['active_missions']) . "):\n";
+            $missionTypeNames = [
+                1 => 'Attack',
+                2 => 'Transport',
+                3 => 'Deploy',
+                4 => 'Spy',
+                5 => 'Colonize',
+                6 => 'Recycle',
+                7 => 'Destroy',
+                8 => 'Expedition',
+                9 => 'Trade',
+            ];
             foreach ($gameState['fleet']['active_missions'] as $mission) {
-                $prompt .= "    mission_type_{$mission['mission_type']}: from planet {$mission['from_planet']} to {$mission['to_planet']}\n";
+                $missionTypeName = $missionTypeNames[$mission['mission_type']] ?? "Type_{$mission['mission_type']}";
+                $prompt .= "    {$missionTypeName}: from planet {$mission['from_planet']}";
+                if ($mission['to_planet']) {
+                    $prompt .= " to planet {$mission['to_planet']}";
+                }
+                $prompt .= "\n";
                 if ($mission['arrival_time']) {
                     $prompt .= "      arrival: {$mission['arrival_time']}\n";
                 }
@@ -1124,6 +1302,8 @@ class BotAIService
                     $prompt .= "      return: {$mission['return_time']}\n";
                 }
             }
+        } else {
+            $prompt .= "  Active missions: (none)\n";
         }
         $prompt .= "\n";
         
@@ -1156,6 +1336,7 @@ class BotAIService
         }
         
         $prompt .= "=== YOUR TASK ===\n";
+        $prompt .= "Let's think step by step.\n";
         $prompt .= "Analyze the game state above and decide which actions to take this turn.\n";
         $prompt .= "Return valid JSON with your decision.\n";
         
@@ -1206,7 +1387,7 @@ class BotAIService
                 
                 // Validate OpenAI-compatible response structure
                 if (!isset($data['choices']) || !is_array($data['choices']) || empty($data['choices'])) {
-                    Log::error("AI API returned invalid structure", [
+                    $this->botLog()->error("AI API returned invalid structure", [
                         'response' => $data,
                         'missing' => 'choices array',
                     ]);
@@ -1214,7 +1395,7 @@ class BotAIService
                 }
                 
                 if (!isset($data['choices'][0]['message']['content'])) {
-                    Log::error("AI API returned invalid structure", [
+                    $this->botLog()->error("AI API returned invalid structure", [
                         'response' => $data,
                         'missing' => 'message.content',
                     ]);
@@ -1253,7 +1434,7 @@ class BotAIService
                 $errorMessage .= ': ' . $errorBody['message'];
             }
             
-            Log::warning("AI API failed", [
+            $this->botLog()->warning("AI API failed", [
                 'status' => $response->status(),
                 'error_message' => $errorMessage,
                 'body' => $response->body(),
@@ -1265,7 +1446,7 @@ class BotAIService
                 'raw_response' => $response->body(),
             ];
         } catch (Exception $e) {
-            Log::error("AI API exception", [
+            $this->botLog()->error("AI API exception", [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -1330,7 +1511,7 @@ class BotAIService
                 $errorMessage .= ': ' . $errorBody['message'];
             }
             
-            Log::warning("Gemini API failed", [
+            $this->botLog()->warning("Gemini API failed", [
                 'status' => $response->status(),
                 'error_message' => $errorMessage,
                 'body' => $response->body(),
@@ -1342,7 +1523,7 @@ class BotAIService
                 'raw_response' => $response->body(),
             ];
         } catch (Exception $e) {
-            Log::error("Gemini API exception", [
+            $this->botLog()->error("Gemini API exception", [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
@@ -1361,7 +1542,7 @@ class BotAIService
     {
         // Validate response structure - check for required fields
         if (!isset($geminiResponse['candidates']) || !is_array($geminiResponse['candidates'])) {
-            Log::error("Gemini API returned invalid structure", [
+                    $this->botLog()->error("Gemini API returned invalid structure", [
                 'response' => $geminiResponse,
                 'missing' => 'candidates array',
             ]);
@@ -1369,7 +1550,7 @@ class BotAIService
         }
         
         if (empty($geminiResponse['candidates'])) {
-            Log::error("Gemini API returned empty candidates", [
+                    $this->botLog()->error("Gemini API returned empty candidates", [
                 'response' => $geminiResponse,
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: empty candidates array'];
@@ -1381,7 +1562,7 @@ class BotAIService
         // Check if response was truncated due to MAX_TOKENS
         $finishReason = $candidate['finishReason'] ?? null;
         if ($finishReason === 'MAX_TOKENS') {
-            Log::warning("Gemini API reached MAX_TOKENS limit - response may be incomplete", [
+            $this->botLog()->warning("Gemini API reached MAX_TOKENS limit - response may be incomplete", [
                 'candidate' => $candidate,
                 'raw_response' => json_encode($geminiResponse),
             ]);
@@ -1394,7 +1575,7 @@ class BotAIService
         
         // Check if parts exists and has content
         if (!isset($candidate['content']['parts']) || !is_array($candidate['content']['parts']) || empty($candidate['content']['parts'])) {
-            Log::error("Gemini API returned invalid candidate structure", [
+                    $this->botLog()->error("Gemini API returned invalid candidate structure", [
                 'candidate' => $candidate,
                 'missing' => 'content.parts array',
                 'finishReason' => $finishReason,
@@ -1405,7 +1586,7 @@ class BotAIService
         $text = $candidate['content']['parts'][0]['text'] ?? null;
         
         if ($text === null || trim($text) === '') {
-            Log::error("Gemini API returned no text content", [
+            $this->botLog()->error("Gemini API returned no text content", [
                 'parts' => $candidate['content']['parts'],
                 'finishReason' => $finishReason,
             ]);
@@ -1414,7 +1595,7 @@ class BotAIService
         
         // Extract token usage from usageMetadata
         if (!isset($geminiResponse['usageMetadata'])) {
-            Log::error("Gemini API returned no usage metadata", [
+            $this->botLog()->error("Gemini API returned no usage metadata", [
                 'response' => $geminiResponse,
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: missing usageMetadata'];
@@ -1545,7 +1726,7 @@ class BotAIService
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
-            Log::warning("Failed to write backup provider switch log: " . $e->getMessage());
+            $this->botLog()->warning("Failed to write backup provider switch log: " . $e->getMessage());
         }
     }
 
@@ -1575,7 +1756,7 @@ class BotAIService
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
-            Log::warning("Failed to write quota exceeded log: " . $e->getMessage());
+            $this->botLog()->warning("Failed to write quota exceeded log: " . $e->getMessage());
         }
     }
 
@@ -1595,7 +1776,13 @@ class BotAIService
             
             $logFile = "{$logDir}/{$date}.log";
             
+            // Add searchable tag line
+            $errorTag = str_replace([' ', "\n", "\r"], ['_', '', ''], substr($errorMessage, 0, 50));
+            $searchableLine = "[API_ERROR] [{$timestamp}] Bot:{$botId} Model:{$model} Error:{$errorTag}";
+            
             $content = str_repeat('=', 100) . "\n";
+            $content .= "{$searchableLine}\n";
+            $content .= str_repeat('=', 100) . "\n";
             $content .= "❌ API ERROR RESPONSE [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Model: {$model}\n";
@@ -1620,7 +1807,7 @@ class BotAIService
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
-            Log::warning("Failed to write error response to file: " . $e->getMessage());
+            $this->botLog()->warning("Failed to write error response to file: " . $e->getMessage());
         }
     }
 
@@ -1641,7 +1828,12 @@ class BotAIService
             
             $logFile = "{$logDir}/{$date}.log";
             
+            // Add searchable tag line
+            $searchableLine = "[API_REQUEST] [{$timestamp}] Bot:{$botId} Model:{$model}";
+            
             $content = str_repeat('=', 100) . "\n";
+            $content .= "{$searchableLine}\n";
+            $content .= str_repeat('=', 100) . "\n";
             $content .= "📤 API REQUEST [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Model: {$model}\n";
@@ -1662,7 +1854,7 @@ class BotAIService
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
-            Log::warning("Failed to write prompt to file: " . $e->getMessage());
+            $this->botLog()->warning("Failed to write prompt to file: " . $e->getMessage());
         }
     }
     
@@ -1683,7 +1875,12 @@ class BotAIService
             
             $logFile = "{$logDir}/{$date}.log";
             
+            // Add searchable tag line
+            $searchableLine = "[API_RESPONSE] [{$timestamp}] Bot:{$botId} Model:{$model} Tokens:{$tokens} Cost:$" . number_format($cost, 6);
+            
             $content = str_repeat('=', 100) . "\n";
+            $content .= "{$searchableLine}\n";
+            $content .= str_repeat('=', 100) . "\n";
             $content .= "📥 API RESPONSE [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Model: {$model}\n";
@@ -1735,7 +1932,7 @@ class BotAIService
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
-            Log::warning("Failed to write response to file: " . $e->getMessage());
+            $this->botLog()->warning("Failed to write response to file: " . $e->getMessage());
         }
     }
 

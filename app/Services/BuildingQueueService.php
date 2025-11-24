@@ -469,9 +469,10 @@ class BuildingQueueService
                 $planet->addResources(new Resources($queue_item->metal, $queue_item->crystal, $queue_item->deuterium, 0));
             }
 
-            // Add canceled flag to the main entry.
+            // Mark as canceled and processed to remove from queue and cleanup database
             $queue_item->building = 0;
             $queue_item->canceled = 1;
+            $queue_item->processed = 1; // Mark as processed to remove from queue completely
 
             $queue_item->save();
 

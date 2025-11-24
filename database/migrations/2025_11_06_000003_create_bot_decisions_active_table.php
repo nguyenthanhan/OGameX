@@ -34,9 +34,6 @@ return new class extends Migration
             $table->string('result', 10);
             $table->text('error_message')->nullable();
             
-            // Cost tracking
-            $table->integer('tokens_used')->nullable();
-            
             $table->timestamps();
 
             // Indexes for fast queries (HOT table)

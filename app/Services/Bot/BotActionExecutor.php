@@ -25,6 +25,14 @@ class BotActionExecutor
     ) {}
 
     /**
+     * Get bot log channel
+     */
+    protected function botLog()
+    {
+        return Log::channel('bot');
+    }
+
+    /**
      * Execute all actions from a decision
      * 
      * @param User $bot
@@ -43,7 +51,7 @@ class BotActionExecutor
 
             // Check idempotency
             if ($this->isActionExecuted($idempotencyKey)) {
-                Log::info("Action already executed: {$idempotencyKey}");
+                $this->botLog()->info("Action already executed: {$idempotencyKey}");
                 continue;
             }
 
@@ -66,7 +74,7 @@ class BotActionExecutor
                     ]);
 
             } catch (Exception $e) {
-                Log::error("Bot {$bot->id} action failed: " . $e->getMessage());
+                $this->botLog()->error("[ACTION_FAILED] Bot:{$bot->id} Error:" . str_replace([' ', "\n"], ['_', ''], substr($e->getMessage(), 0, 50)) . " | Bot {$bot->id} action failed: " . $e->getMessage());
                 
                 $results[] = [
                     'action' => $action,
@@ -194,7 +202,7 @@ class BotActionExecutor
             // Add to building queue
             $this->buildingQueueService->add($planet, $building->id);
 
-            Log::info("Bot {$player->getId()} started building {$buildingName} level {$nextLevel} on planet {$planetId}");
+            $this->botLog()->info("[ACTION_BUILD_BUILDING] Bot:{$player->getId()} Type:BUILD_BUILDING Target:{$buildingName} Level:{$nextLevel} Planet:{$planetId} | Bot {$player->getId()} started building {$buildingName} level {$nextLevel} on planet {$planetId}");
 
             return [
                 'success' => true,
@@ -269,7 +277,7 @@ class BotActionExecutor
             // Add to research queue
             $this->researchQueueService->add($player, $planet, $technology->id);
 
-            Log::info("Bot {$player->getId()} started researching {$techName} level {$nextLevel}");
+            $this->botLog()->info("[ACTION_START_RESEARCH] Bot:{$player->getId()} Type:START_RESEARCH Target:{$techName} Level:{$nextLevel} | Bot {$player->getId()} started researching {$techName} level {$nextLevel}");
 
             return [
                 'success' => true,
@@ -344,7 +352,7 @@ class BotActionExecutor
             // Deduct resources
             $planet->deductResources($totalPrice);
 
-            Log::info("Bot {$player->getId()} started building {$quantity}x {$unitName} on planet {$planetId}");
+            $this->botLog()->info("[ACTION_BUILD_UNITS] Bot:{$player->getId()} Type:BUILD_UNITS Target:{$unitName} Quantity:{$quantity} Planet:{$planetId} | Bot {$player->getId()} started building {$quantity}x {$unitName} on planet {$planetId}");
 
             return [
                 'success' => true,
@@ -420,7 +428,7 @@ class BotActionExecutor
 
             $this->buildingQueueService->cancel($planet, $queueId);
 
-            Log::info("Bot {$player->getId()} canceled building queue item {$queueId} on planet {$planetId}");
+            $this->botLog()->info("[ACTION_CANCEL_BUILDING] Bot:{$player->getId()} Type:CANCEL_BUILDING QueueId:{$queueId} Planet:{$planetId} | Bot {$player->getId()} canceled building queue item {$queueId} on planet {$planetId}");
 
             return ['success' => true, 'queue_id' => $queueId];
 
@@ -466,7 +474,7 @@ class BotActionExecutor
 
             $this->researchQueueService->cancel($player, $queueItem->id, $queueItem->object_id);
 
-            Log::info("Bot {$player->getId()} canceled research queue item {$queueItem->id}");
+            $this->botLog()->info("[ACTION_CANCEL_RESEARCH] Bot:{$player->getId()} Type:CANCEL_RESEARCH QueueId:{$queueItem->id} | Bot {$player->getId()} canceled research queue item {$queueItem->id}");
 
             return ['success' => true, 'queue_id' => $queueItem->id];
 
@@ -512,7 +520,7 @@ class BotActionExecutor
             // Delete queue item
             DB::table('unit_queues')->where('id', $queueItem->id)->delete();
 
-            Log::info("Bot {$player->getId()} canceled unit production on planet {$planetId}");
+            $this->botLog()->info("[ACTION_CANCEL_UNITS] Bot:{$player->getId()} Type:CANCEL_UNITS Planet:{$planetId} | Bot {$player->getId()} canceled unit production on planet {$planetId}");
 
             return ['success' => true, 'planet_id' => $planetId];
 
@@ -551,7 +559,7 @@ class BotActionExecutor
             if ($fleetMission) {
                 $fleetService->cancelMission($fleetMission);
                 
-                Log::info("Bot {$player->getId()} canceled fleet mission {$fleetId}");
+                $this->botLog()->info("[ACTION_CANCEL_FLEET] Bot:{$player->getId()} Type:CANCEL_FLEET FleetId:{$fleetId} | Bot {$player->getId()} canceled fleet mission {$fleetId}");
                 
                 return ['success' => true, 'fleet_id' => $fleetId];
             }
@@ -666,7 +674,7 @@ class BotActionExecutor
             // Delete planet
             DB::table('planets')->where('id', $planetId)->delete();
 
-            Log::warning("Bot {$player->getId()} abandoned planet {$planetId}");
+            $this->botLog()->warning("Bot {$player->getId()} abandoned planet {$planetId}");
 
             return ['success' => true, 'planet_id' => $planetId];
 

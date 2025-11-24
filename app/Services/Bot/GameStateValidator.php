@@ -13,6 +13,14 @@ use Illuminate\Support\Facades\Log;
 class GameStateValidator
 {
     /**
+     * Get bot log channel
+     */
+    protected static function botLog()
+    {
+        return Log::channel('bot');
+    }
+
+    /**
      * Get validation warnings without logging (for use in AI prompt)
      * 
      * @param array $gameState The game state to validate
@@ -52,8 +60,8 @@ class GameStateValidator
             // Log to bot-specific log file
             self::logToBotFile($botId, $warnings);
             
-            // Also log to Laravel log for monitoring
-            Log::warning("Game state validation detected inconsistencies", [
+            // Also log to bot log channel
+            self::botLog()->warning("Game state validation detected inconsistencies", [
                 'bot_id' => $botId,
                 'warning_count' => count($warnings),
             ]);
@@ -83,11 +91,17 @@ class GameStateValidator
             
             $logFile = "{$logDir}/{$date}.log";
             
+            // Add searchable tag line
+            $warningCount = count($warnings);
+            $searchableLine = "[VALIDATION_WARNINGS] [{$timestamp}] Bot:{$botId} Count:{$warningCount}";
+            
             $content = str_repeat('=', 100) . "\n";
+            $content .= "{$searchableLine}\n";
+            $content .= str_repeat('=', 100) . "\n";
             $content .= "⚠️  GAME STATE VALIDATION WARNINGS [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Bot ID: {$botId}\n";
-            $content .= "Warnings: " . count($warnings) . "\n\n";
+            $content .= "Warnings: {$warningCount}\n\n";
             
             foreach ($warnings as $index => $warning) {
                 $content .= ($index + 1) . ". {$warning}\n";
@@ -98,7 +112,7 @@ class GameStateValidator
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails - fall back to Laravel log
-            Log::warning("Failed to write validation warnings to bot log file: " . $e->getMessage());
+            self::botLog()->warning("Failed to write validation warnings to bot log file: " . $e->getMessage());
         }
     }
     

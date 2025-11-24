@@ -106,7 +106,7 @@ class BotController extends Controller
             return redirect()->route('admin.bots.index')
                 ->with('success', "Bot '{$validated['username']}' created successfully with starting planet");
         } catch (\Exception $e) {
-            \Log::error("Failed to create bot {$validated['username']}: " . $e->getMessage());
+            \Log::channel('bot')->error("Failed to create bot {$validated['username']}: " . $e->getMessage());
             return redirect()->back()
                 ->withInput()
                 ->with('error', 'Failed to create bot: ' . $e->getMessage());
@@ -208,7 +208,7 @@ class BotController extends Controller
             return redirect()->route('admin.bots.index')
                 ->with('success', "Bot '{$botUsername}' and all related data deleted successfully");
         } catch (\Exception $e) {
-            \Log::error("Failed to delete bot {$botUsername}: " . $e->getMessage());
+            \Log::channel('bot')->error("Failed to delete bot {$botUsername}: " . $e->getMessage());
             return redirect()->route('admin.bots.index')
                 ->with('error', 'Failed to delete bot: ' . $e->getMessage());
         }
@@ -236,7 +236,7 @@ class BotController extends Controller
             return redirect()->route('admin.bots.index')
                 ->with('success', "Bot '{$botUsername}' force deleted (all fleets canceled)");
         } catch (\Exception $e) {
-            \Log::error("Failed to force delete bot {$botUsername}: " . $e->getMessage());
+            \Log::channel('bot')->error("Failed to force delete bot {$botUsername}: " . $e->getMessage());
             return redirect()->route('admin.bots.index')
                 ->with('error', 'Failed to delete bot: ' . $e->getMessage());
         }
