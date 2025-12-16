@@ -9,7 +9,7 @@ use OGame\Models\User;
 
 /**
  * Bot Quota Service
- * 
+ *
  * Manages atomic quota checking and enforcement to prevent race conditions.
  * Uses database transactions for consistency instead of cache.
  */
@@ -17,10 +17,10 @@ class BotQuotaService
 {
     /**
      * Atomically check and record quota usage
-     * 
+     *
      * CRITICAL: Uses database transaction with row locking to prevent race conditions
      * Only tracks requests per hour
-     * 
+     *
      * @param User $bot
      * @return array
      * @throws QuotaExceededException
@@ -66,11 +66,9 @@ class BotQuotaService
         });
     }
 
-
-
     /**
      * Get soft limit warning when approaching quota
-     * 
+     *
      * @param User $bot
      * @param Carbon $hour
      * @return array|null
@@ -102,7 +100,7 @@ class BotQuotaService
 
     /**
      * Check quota without recording (for pre-flight checks)
-     * 
+     *
      * @param User $bot
      * @throws QuotaExceededException
      */
@@ -126,7 +124,7 @@ class BotQuotaService
 
     /**
      * Record usage (called after successful action)
-     * 
+     *
      * @param User $bot
      */
     public function recordUsage(User $bot): void

@@ -83,4 +83,3 @@ class BotAiConfigFactory extends Factory
         ]);
     }
 }
-

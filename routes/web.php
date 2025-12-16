@@ -249,7 +249,7 @@ Route::middleware(['auth', 'globalgame', 'locale', 'admin'])->group(function () 
 
     // Bot Management Routes
     // Redirect to Bot Monitor instead of separate manage bots page
-    Route::get('/admin/bots', function() {
+    Route::get('/admin/bots', function () {
         return redirect()->route('admin.bot-monitor.dashboard');
     })->name('admin.bots.index');
     Route::get('/admin/bots/create', [\OGame\Http\Controllers\Admin\BotController::class, 'create'])->name('admin.bots.create');

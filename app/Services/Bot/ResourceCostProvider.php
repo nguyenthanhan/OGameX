@@ -22,12 +22,12 @@ class ResourceCostProvider
             'deuterium_synthesizer' => ['metal' => 225, 'crystal' => 75, 'deuterium' => 0, 'factor' => 1.5],
             'solar_plant' => ['metal' => 75, 'crystal' => 30, 'deuterium' => 0, 'factor' => 1.5],
             'fusion_plant' => ['metal' => 900, 'crystal' => 360, 'deuterium' => 180, 'factor' => 1.8],
-            
+
             // Storage buildings
             'metal_store' => ['metal' => 1000, 'crystal' => 0, 'deuterium' => 0, 'factor' => 2.0],
             'crystal_store' => ['metal' => 1000, 'crystal' => 500, 'deuterium' => 0, 'factor' => 2.0],
             'deuterium_store' => ['metal' => 1000, 'crystal' => 1000, 'deuterium' => 0, 'factor' => 2.0],
-            
+
             // Station buildings (facilities)
             'robot_factory' => ['metal' => 400, 'crystal' => 120, 'deuterium' => 200, 'factor' => 2.0],
             'shipyard' => ['metal' => 400, 'crystal' => 200, 'deuterium' => 100, 'factor' => 2.0],
@@ -37,7 +37,7 @@ class ResourceCostProvider
             'nano_factory' => ['metal' => 1000000, 'crystal' => 500000, 'deuterium' => 100000, 'factor' => 2.0],
             'terraformer' => ['metal' => 50000, 'crystal' => 0, 'deuterium' => 100000, 'factor' => 2.0],
             'space_dock' => ['metal' => 200, 'crystal' => 0, 'deuterium' => 50, 'factor' => 2.0],
-            
+
             // Moon buildings
             'lunar_base' => ['metal' => 20000, 'crystal' => 40000, 'deuterium' => 20000, 'factor' => 2.0],
             'sensor_phalanx' => ['metal' => 20000, 'crystal' => 40000, 'deuterium' => 10000, 'factor' => 2.0],
@@ -87,7 +87,7 @@ class ResourceCostProvider
             'recycler' => ['metal' => 10000, 'crystal' => 6000, 'deuterium' => 2000],
             'espionage_probe' => ['metal' => 0, 'crystal' => 1000, 'deuterium' => 0],
             'solar_satellite' => ['metal' => 0, 'crystal' => 2000, 'deuterium' => 500],
-            
+
             // Military ships
             'light_fighter' => ['metal' => 3000, 'crystal' => 1000, 'deuterium' => 0],
             'heavy_fighter' => ['metal' => 6000, 'crystal' => 4000, 'deuterium' => 0],
@@ -97,7 +97,7 @@ class ResourceCostProvider
             'bomber' => ['metal' => 50000, 'crystal' => 25000, 'deuterium' => 15000],
             'destroyer' => ['metal' => 60000, 'crystal' => 50000, 'deuterium' => 15000],
             'deathstar' => ['metal' => 5000000, 'crystal' => 4000000, 'deuterium' => 1000000],
-            
+
             // Defense
             'rocket_launcher' => ['metal' => 2000, 'crystal' => 0, 'deuterium' => 0],
             'light_laser' => ['metal' => 1500, 'crystal' => 500, 'deuterium' => 0],
@@ -129,7 +129,7 @@ class ResourceCostProvider
         // OGame formula: cost = baseCost * factor^(level-1)
         $factor = $baseCost['factor'];
         $multiplier = pow($factor, $level - 1);
-        
+
         return [
             'metal' => (int)floor($baseCost['metal'] * $multiplier),
             'crystal' => (int)floor($baseCost['crystal'] * $multiplier),
@@ -154,7 +154,7 @@ class ResourceCostProvider
         // OGame formula: cost = baseCost * factor^(level-1)
         $factor = $baseCost['factor'];
         $multiplier = pow($factor, $level - 1);
-        
+
         return [
             'metal' => (int)floor($baseCost['metal'] * $multiplier),
             'crystal' => (int)floor($baseCost['crystal'] * $multiplier),
@@ -198,7 +198,7 @@ class ResourceCostProvider
             'space_dock' => [
                 ['building' => 'shipyard', 'level' => 2],
             ],
-            
+
             // Moon buildings
             'lunar_base' => [
                 // No prerequisites (but only on moon)
@@ -361,7 +361,7 @@ class ResourceCostProvider
                 'shipyard' => 1,
                 'requirements' => [],
             ],
-            
+
             // Military ships
             'light_fighter' => [
                 'shipyard' => 1,
@@ -419,7 +419,7 @@ class ResourceCostProvider
                     ['type' => 'graviton_technology', 'level' => 1],
                 ],
             ],
-            
+
             // Defense (requires shipyard)
             'rocket_launcher' => [
                 'shipyard' => 1,

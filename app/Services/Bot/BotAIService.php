@@ -16,7 +16,8 @@ class BotAIService
 {
     public function __construct(
         protected BotQuotaService $quotaService
-    ) {}
+    ) {
+    }
 
     /**
      * Get bot log channel
@@ -62,49 +63,49 @@ class BotAIService
         if (!$model && is_array($config->bot_ai_model) && !empty($config->bot_ai_model)) {
             $model = $config->bot_ai_model[0];
         }
-        
+
         if (!$model) {
             throw new \Exception("No AI model configured for bot");
         }
 
         // Log prompt once before retries
         $this->writePromptToFile($bot->id, $model, $messages);
-        
+
         // Try primary provider
         try {
             $decision = $this->callAPIWithConfig($bot->id, $config, $model, $messages, 'primary');
-            
+
             // Record quota ONLY after successful API call AND valid response
             $this->quotaService->recordUsage($bot);
-            
+
             return $decision;
         } catch (Exception $primaryException) {
             $primaryError = $primaryException->getMessage();
             $this->botLog()->warning("Bot {$bot->id} primary AI provider failed: {$primaryError}");
-            
+
             // Check if backup provider is configured
             if ($bot->backup_bot_ai_config_id) {
                 $backupConfig = BotAiConfig::find($bot->backup_bot_ai_config_id);
-                
+
                 if ($backupConfig && $backupConfig->is_active) {
                     // Use bot's selected backup model, or first model from backup config if not set
                     $backupModel = $bot->backup_bot_ai_model;
                     if (!$backupModel && is_array($backupConfig->bot_ai_model) && !empty($backupConfig->bot_ai_model)) {
                         $backupModel = $backupConfig->bot_ai_model[0];
                     }
-                    
+
                     if ($backupModel) {
                         $this->botLog()->info("[BACKUP_SWITCH] Bot:{$bot->id} ConfigId:{$backupConfig->id} Model:{$backupModel} | Bot {$bot->id} switching to backup AI provider (config: {$backupConfig->id}, model: {$backupModel})");
-                        
+
                         // Log backup provider attempt to bot file
                         $this->writeBackupProviderSwitch($bot->id, $backupModel, $primaryError);
-                        
+
                         try {
                             $decision = $this->callAPIWithConfig($bot->id, $backupConfig, $backupModel, $messages, 'backup');
-                            
+
                             // Record quota ONLY after successful API call AND valid response
                             $this->quotaService->recordUsage($bot);
-                            
+
                             return $decision;
                         } catch (Exception $backupException) {
                             $backupError = $backupException->getMessage();
@@ -118,7 +119,7 @@ class BotAIService
                     $this->botLog()->warning("Bot {$bot->id} backup config not found or inactive (config_id: {$bot->backup_bot_ai_config_id})");
                 }
             }
-            
+
             // No backup configured or backup failed - re-throw primary exception
             throw $primaryException;
         }
@@ -126,7 +127,7 @@ class BotAIService
 
     /**
      * Call AI API with specific config and retry logic
-     * 
+     *
      * @param int $botId Bot ID for logging
      * @param BotAiConfig $config AI configuration to use
      * @param string $model Model name to use
@@ -139,25 +140,25 @@ class BotAIService
     {
         $maxRetries = config('ogame.bots.ai.max_retries', 1);
         $lastError = 'Unknown error';
-        
+
         for ($attempt = 0; $attempt <= $maxRetries; $attempt++) {
             try {
                 if ($attempt > 0) {
                     $this->botLog()->info("[API_RETRY] Bot:{$botId} Provider:{$providerType} Attempt:{$attempt}/{$maxRetries} | Bot {$botId} {$providerType} provider retry attempt {$attempt}/{$maxRetries}");
                 }
-                
+
                 $response = $this->callAPI($botId, $config->bot_ai_url, $config->bot_ai_api_key, $model, $messages);
-                
+
                 if ($response['success']) {
                     // Get raw response content
                     $rawContent = $response['data']['choices'][0]['message']['content'];
-                    
+
                     // Preprocess: Remove <think> tags and other non-JSON content
                     $cleanedContent = $this->preprocessAIResponse($rawContent);
-                    
+
                     // Parse and return decision
                     $decision = json_decode($cleanedContent, true);
-                    
+
                     // Validate decision structure
                     if (!is_array($decision) || !isset($decision['actions'])) {
                         $lastError = "Invalid decision format from AI";
@@ -167,12 +168,12 @@ class BotAIService
                         ]);
                         throw new Exception($lastError);
                     }
-                    
+
                     // Add default values for optional fields
                     $decision = array_merge([
                         'overall_strategy' => 'No strategy provided',
                     ], $decision);
-                    
+
                     return $decision + ['_metadata' => ['tokens_used' => $response['tokens'], 'cost' => $response['cost'], 'provider' => $providerType]];
                 } else {
                     // API call failed - log the error with raw response if available
@@ -180,12 +181,12 @@ class BotAIService
                     $this->botLog()->error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}", [
                         'raw_response' => $response['raw_response'] ?? null,
                     ]);
-                    
+
                     // Also log to bot file
                     if (isset($response['raw_response'])) {
                         $this->writeErrorResponseToFile($botId, $model, $lastError, $response['raw_response']);
                     }
-                    
+
                     if ($attempt < $maxRetries) {
                         sleep(pow(2, $attempt)); // Exponential backoff
                     }
@@ -193,7 +194,7 @@ class BotAIService
             } catch (Exception $e) {
                 $lastError = $e->getMessage();
                 $this->botLog()->error("Bot {$botId} {$providerType} attempt {$attempt}: {$lastError}");
-                
+
                 if ($attempt < $maxRetries) {
                     sleep(pow(2, $attempt)); // Exponential backoff
                 }
@@ -207,27 +208,27 @@ class BotAIService
 
     /**
      * Detect API provider type from configuration URL
-     * 
+     *
      * @param string $apiUrl The API base URL from bot configuration
      * @return string Provider type: 'gemini' or 'openai'
      */
     protected function detectProvider(string $apiUrl): string
     {
         $urlLower = strtolower($apiUrl);
-        
+
         // Check for Gemini indicators
-        if (str_contains($urlLower, 'generativelanguage.googleapis.com') || 
+        if (str_contains($urlLower, 'generativelanguage.googleapis.com') ||
             str_contains($urlLower, 'gemini')) {
             return 'gemini';
         }
-        
+
         // Default to OpenAI-compatible for backward compatibility
         return 'openai';
     }
 
     /**
      * Transform OpenAI-style messages to Gemini format
-     * 
+     *
      * @param array $messages OpenAI-style messages with role and content
      * @return array Gemini-formatted request body with contents and generationConfig
      */
@@ -235,7 +236,7 @@ class BotAIService
     {
         $systemMessage = null;
         $transformedMessages = [];
-        
+
         // Extract system message if present
         foreach ($messages as $message) {
             if (($message['role'] ?? '') === 'system') {
@@ -244,7 +245,7 @@ class BotAIService
                 $transformedMessages[] = $message;
             }
         }
-        
+
         // If we have a system message, prepend it to the first user message
         if ($systemMessage !== null && !empty($transformedMessages)) {
             $firstMessage = $transformedMessages[0];
@@ -252,23 +253,23 @@ class BotAIService
                 $transformedMessages[0]['content'] = $systemMessage . "\n\n" . ($firstMessage['content'] ?? '');
             }
         }
-        
+
         // Convert to Gemini format and combine consecutive same-role messages
         $geminiContents = [];
         $currentRole = null;
         $currentParts = [];
-        
+
         foreach ($transformedMessages as $message) {
             $role = $message['role'] ?? '';
             $content = $message['content'] ?? '';
-            
+
             // Map OpenAI roles to Gemini roles
             $geminiRole = match($role) {
                 'user' => 'user',
                 'assistant' => 'model',
                 default => 'user', // Default to user for unknown roles
             };
-            
+
             // If role changes, save the current accumulated message
             if ($currentRole !== null && $currentRole !== $geminiRole) {
                 $geminiContents[] = [
@@ -277,12 +278,12 @@ class BotAIService
                 ];
                 $currentParts = [];
             }
-            
+
             // Add content to current parts
             $currentParts[] = ['text' => $content];
             $currentRole = $geminiRole;
         }
-        
+
         // Add the last accumulated message
         if ($currentRole !== null && !empty($currentParts)) {
             $geminiContents[] = [
@@ -290,7 +291,7 @@ class BotAIService
                 'parts' => $currentParts,
             ];
         }
-        
+
         // Return Gemini-formatted request body
         return [
             'contents' => $geminiContents,
@@ -310,10 +311,10 @@ class BotAIService
         // Also get warnings to include in prompt for AI consideration
         $warnings = GameStateValidator::getWarnings($gameState);
         $validatedGameState = GameStateValidator::validate($gameState);
-        
+
         $systemPrompt = $this->buildSystemPrompt($strategy, $skillLevel);
         $userPrompt = $this->buildUserPrompt($validatedGameState, $lastTurnSummary, $warnings);
-        
+
         return [
             ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => $userPrompt],
@@ -328,12 +329,12 @@ class BotAIService
     {
         // Build all sections with consistent formatting
         $sections = [];
-        
+
         // 1. ROLE - Who you are and what you do
         $sections[] = "=== ROLE ===\n" .
             "You are an OGame AI (skill {$skillLevel}/10, {$strategy} strategy).\n" .
             "Analyze game state → return valid actions as JSON.\n";
-        
+
         // 2. STRATEGY PRIORITIES - Strategy-specific guidance
         $strategyGuides = [
             'miner' => "PRIORITIES: mines > storage > research_lab > energy\nRatio: Metal:Crystal:Deuterium = 2:1.5:1",
@@ -341,10 +342,10 @@ class BotAIService
             'defender' => "PRIORITIES: defenses > storage > fleet_save\nBuild rocket_launcher, light_laser early.",
             'balanced' => "PRIORITIES: adapt to situation\nEconomy first, then research, then military as needed.",
         ];
-        
+
         $sections[] = "=== STRATEGY PRIORITIES ===\n" .
             ($strategyGuides[$strategy] ?? $strategyGuides['balanced']);
-        
+
         // 3. OUTPUT FORMAT - How to respond
         $sections[] = "=== OUTPUT FORMAT ===\n" .
             "JSON only, no markdown.\n" .
@@ -365,19 +366,19 @@ class BotAIService
             "  Required: action_type, planet_id, target_coords, ships, mission_type\n\n" .
             "IMPORTANT: When queues are available and resources allow, MAXIMIZE actions.\n" .
             "See DECISION RULES section for details on when and how to maximize actions.";
-        
+
         // 4. AVAILABLE ACTIONS - What you can do
         $sections[] = "=== AVAILABLE ACTIONS ===\n" .
             "BUILD_BUILDING: metal_mine, crystal_mine, deuterium_synthesizer, solar_plant, fusion_plant, metal_store, crystal_store, deuterium_store, research_lab, robot_factory, shipyard, missile_silo, nano_factory\n\n" .
             "START_RESEARCH: energy_technology, combustion_drive, laser_technology, weapon_technology, shielding_technology, armor_technology, computer_technology, espionage_technology, astrophysics (requires research_lab)\n\n" .
             "BUILD_UNITS: light_fighter, heavy_fighter, cruiser, small_cargo, large_cargo, espionage_probe, rocket_launcher, light_laser, small_shield_dome, large_shield_dome (requires shipyard for ships, missile_silo for shield domes)";
-        
+
         // 5. RESOURCE COSTS - What things cost
         $sections[] = $this->buildResourceCostsSection();
-        
+
         // 6. PREREQUISITES - What you need before building
         $sections[] = $this->buildPrerequisitesSection();
-        
+
         // 7. DECISION RULES - Rules to follow
         $sections[] = "=== DECISION RULES (Sequential) ===\n\n" .
             "BLOCKING RULES (prevent specific actions):\n" .
@@ -540,15 +541,13 @@ class BotAIService
             "- All queues busy (build_queue_busy AND research_queue_busy AND unit_queue_busy)\n" .
             "- Not enough resources for ANY available action\n" .
             "- Last 2 turns failed same action";
-        
+
         // 8. DECISION PROCESS - Step-by-step guide
         $sections[] = $this->buildDecisionProcessSection();
-        
+
         // Join all sections with double newlines for readability
         return implode("\n\n", $sections) . "\n";
     }
-
-
 
     /**
      * Build resource costs section for system prompt
@@ -557,26 +556,38 @@ class BotAIService
     protected function buildResourceCostsSection(): string
     {
         $section = "=== RESOURCE COSTS (Level 1) ===\n\n";
-        
+
         // Buildings
         $section .= "BUILDINGS:\n";
         $buildingCosts = ResourceCostProvider::getBuildingCosts();
         foreach ($buildingCosts as $building => $cost) {
             $parts = [];
-            if ($cost['metal'] > 0) $parts[] = number_format($cost['metal']) . 'M';
-            if ($cost['crystal'] > 0) $parts[] = number_format($cost['crystal']) . 'C';
-            if ($cost['deuterium'] > 0) $parts[] = number_format($cost['deuterium']) . 'D';
+            if ($cost['metal'] > 0) {
+                $parts[] = number_format($cost['metal']) . 'M';
+            }
+            if ($cost['crystal'] > 0) {
+                $parts[] = number_format($cost['crystal']) . 'C';
+            }
+            if ($cost['deuterium'] > 0) {
+                $parts[] = number_format($cost['deuterium']) . 'D';
+            }
             $section .= "  {$building}: " . implode(', ', $parts) . "\n";
         }
-        
+
         $section .= "\nRESEARCH:\n";
         $researchCosts = ResourceCostProvider::getResearchCosts();
         foreach ($researchCosts as $research => $cost) {
             $parts = [];
-            if ($cost['metal'] > 0) $parts[] = number_format($cost['metal']) . 'M';
-            if ($cost['crystal'] > 0) $parts[] = number_format($cost['crystal']) . 'C';
-            if ($cost['deuterium'] > 0) $parts[] = number_format($cost['deuterium']) . 'D';
-            
+            if ($cost['metal'] > 0) {
+                $parts[] = number_format($cost['metal']) . 'M';
+            }
+            if ($cost['crystal'] > 0) {
+                $parts[] = number_format($cost['crystal']) . 'C';
+            }
+            if ($cost['deuterium'] > 0) {
+                $parts[] = number_format($cost['deuterium']) . 'D';
+            }
+
             // Special case: graviton_technology only costs Energy (scales by level), not resources
             // Formula: Energy(level) = 300,000 × 2.0^(level-1)
             // Level 1: 300,000E, Level 2: 600,000E, Level 3: 1,200,000E, etc.
@@ -586,23 +597,29 @@ class BotAIService
                 $section .= "  {$research}: " . (empty($parts) ? 'N/A' : implode(', ', $parts)) . "\n";
             }
         }
-        
+
         $section .= "\nUNITS & SHIPS:\n";
         $unitCosts = ResourceCostProvider::getUnitCosts();
         foreach ($unitCosts as $unit => $cost) {
             $parts = [];
-            if ($cost['metal'] > 0) $parts[] = number_format($cost['metal']) . 'M';
-            if ($cost['crystal'] > 0) $parts[] = number_format($cost['crystal']) . 'C';
-            if ($cost['deuterium'] > 0) $parts[] = number_format($cost['deuterium']) . 'D';
+            if ($cost['metal'] > 0) {
+                $parts[] = number_format($cost['metal']) . 'M';
+            }
+            if ($cost['crystal'] > 0) {
+                $parts[] = number_format($cost['crystal']) . 'C';
+            }
+            if ($cost['deuterium'] > 0) {
+                $parts[] = number_format($cost['deuterium']) . 'D';
+            }
             $section .= "  {$unit}: " . implode(', ', $parts) . "\n";
         }
-        
+
         $section .= "\nCOST FORMULA:\n";
         $section .= "Buildings/Research: cost(level) = base_cost × factor^(level-1)\n";
         $section .= "Most buildings use factor 2.0, mines use 1.5-1.6\n";
         $section .= "Example: metal_mine level 5 = 60M × 1.5^4 = 304M, 76C\n";
         $section .= "Special: graviton_technology costs Energy only (300,000E × 2.0^(level-1)), no resources\n\n";
-        
+
         $section .= "ENERGY CONSUMPTION/PRODUCTION FORMULAS:\n";
         $section .= "Energy-consuming buildings (negative energy = consumption):\n";
         $section .= "  - metal_mine: -10 × level × 1.1^level\n";
@@ -614,7 +631,7 @@ class BotAIService
         $section .= "IMPORTANT: Before building energy-consuming buildings, calculate:\n";
         $section .= "  future_energy = current_energy_available - building_energy_consumption_at_new_level\n";
         $section .= "  If future_energy < 0, build energy-producing buildings FIRST!";
-        
+
         return $section;
     }
 
@@ -626,13 +643,13 @@ class BotAIService
     protected function buildPrerequisitesSection(): string
     {
         $section = "=== PREREQUISITES ===\n";
-        
+
         // Building prerequisites (key buildings only)
         $section .= "BUILDINGS:\n";
         $keyBuildings = ['shipyard', 'missile_silo', 'nano_factory', 'terraformer', 'space_dock'];
-        $allBuildings = [...\OGame\Services\ObjectService::getBuildingObjects(), 
+        $allBuildings = [...\OGame\Services\ObjectService::getBuildingObjects(),
                          ...\OGame\Services\ObjectService::getStationObjects()];
-        
+
         foreach ($keyBuildings as $buildingName) {
             foreach ($allBuildings as $building) {
                 if ($building->machine_name === $buildingName && !empty($building->requirements)) {
@@ -647,11 +664,11 @@ class BotAIService
             }
         }
         $section .= "  Others (mines, storage, research_lab): none\n";
-        
+
         // Research prerequisites (from actual GameObject data)
         $section .= "\nRESEARCH:\n";
         $allResearch = \OGame\Services\ObjectService::getResearchObjects();
-        
+
         foreach ($allResearch as $research) {
             $prereqParts = [];
             foreach ($research->requirements as $req) {
@@ -666,16 +683,16 @@ class BotAIService
                 $section .= "  {$research->machine_name}: " . implode(', ', $prereqParts) . "\n";
             }
         }
-        
+
         // Unit prerequisites (from actual GameObject data)
         $section .= "\nUNITS:\n";
         $allUnits = \OGame\Services\ObjectService::getUnitObjects();
-        
+
         // List common units that are often used (prioritize these)
-        $commonUnits = ['light_fighter', 'small_cargo', 'large_cargo', 'espionage_probe', 
+        $commonUnits = ['light_fighter', 'small_cargo', 'large_cargo', 'espionage_probe',
                        'heavy_fighter', 'cruiser', 'recycler', 'colony_ship', 'solar_satellite',
                        'rocket_launcher', 'light_laser'];
-        
+
         // First add common units
         foreach ($commonUnits as $unitName) {
             foreach ($allUnits as $unit) {
@@ -690,9 +707,9 @@ class BotAIService
                 }
             }
         }
-        
+
         $section .= "  Other units: check shipyard level and research requirements";
-        
+
         return $section;
     }
 
@@ -704,36 +721,36 @@ class BotAIService
     {
         $section = "=== DECISION PROCESS ===\n";
         $section .= "Follow these steps:\n\n";
-        
+
         $section .= "1. Identify Available Queues\n";
         $section .= "   Check which queues NOT busy. Busy queues block ONLY their action type.\n\n";
-        
+
         $section .= "2. List Possible Actions\n";
         $section .= "   For each available queue, list all possible actions.\n\n";
-        
+
         $section .= "3. Filter by Prerequisites\n";
         $section .= "   Remove actions where requirements not met.\n";
         $section .= "   For BUILD_UNITS: Check shipyard level AND research levels from game state.\n";
         $section .= "   Example: large_cargo requires shipyard(4) + combustion_drive(6).\n\n";
-        
+
         $section .= "4. Filter by Affordability\n";
         $section .= "   Calculate cost (base × factor^(level-1)). Remove if resources < cost.\n\n";
-        
+
         $section .= "5. Apply Priority Rules\n";
         $section .= "   Follow DECISION RULES section above (energy deficit = CRITICAL, storage full = HIGH priority).\n\n";
-        
+
         $section .= "6. Select Best Actions (MAXIMIZE when possible)\n";
         $section .= "   Choose based on strategy. Don't repeat failed actions.\n";
         $section .= "   See DECISION RULES section for details on maximizing actions when storage is full.\n\n";
-        
+
         $section .= "7. Return JSON\n";
         $section .= "   Format: {\"actions\":[...]} or {\"actions\":[]} if nothing available.\n\n";
-        
+
         $section .= "EXAMPLE 1: Planet 1000M, 500C, 0D | energy -50 | build_queue free\n";
         $section .= "→ Apply Priority Rule 6 (energy deficit) → BUILD solar_plant\n\n";
         $section .= "EXAMPLE 2: Storage 100% full | queues all free | resources: 50000M, 30000C, 10000D\n";
         $section .= "→ Apply Priority Rule 7 (storage full) → MAXIMIZE with multiple actions";
-        
+
         return $section;
     }
 
@@ -744,22 +761,22 @@ class BotAIService
     protected function buildAffordabilitySection(array $gameState): string
     {
         $section = "=== AFFORDABILITY STATUS ===\n\n";
-        
+
         foreach ($gameState['planets'] ?? [] as $planet) {
             $section .= "Planet {$planet['planet_id']}: {$planet['name']}\n";
             $section .= "  Available: {$planet['metal_stored']}M, {$planet['crystal_stored']}C, {$planet['deuterium_stored']}D\n";
-            
+
             // Check BUILD_BUILDING affordability
             if (!$planet['build_queue_busy']) {
                 $section .= "  BUILD_BUILDING (queue available):\n";
                 $affordableBuildings = [];
                 $unaffordableBuildings = [];
-                
+
                 // Check common buildings
-                $buildingsToCheck = ['metal_mine', 'crystal_mine', 'deuterium_synthesizer', 'solar_plant', 
-                                     'metal_store', 'crystal_store', 'deuterium_store', 
+                $buildingsToCheck = ['metal_mine', 'crystal_mine', 'deuterium_synthesizer', 'solar_plant',
+                                     'metal_store', 'crystal_store', 'deuterium_store',
                                      'research_lab', 'robot_factory', 'shipyard'];
-                
+
                 foreach ($buildingsToCheck as $building) {
                     // Find current level
                     $currentLevel = 0;
@@ -769,14 +786,14 @@ class BotAIService
                             break;
                         }
                     }
-                    
+
                     $nextLevel = $currentLevel + 1;
                     $cost = ResourceCostProvider::calculateBuildingCost($building, $nextLevel);
-                    
+
                     $isAffordable = $planet['metal_stored'] >= $cost['metal'] &&
                                    $planet['crystal_stored'] >= $cost['crystal'] &&
                                    $planet['deuterium_stored'] >= $cost['deuterium'];
-                    
+
                     if ($isAffordable) {
                         $affordableBuildings[] = "{$building}({$nextLevel})";
                     } else {
@@ -793,13 +810,13 @@ class BotAIService
                         $unaffordableBuildings[] = "{$building}({$nextLevel}): " . implode(', ', $missing);
                     }
                 }
-                
+
                 if (!empty($affordableBuildings)) {
                     $section .= "    ✓ AFFORDABLE: " . implode(', ', $affordableBuildings) . "\n";
                 } else {
                     $section .= "    ✗ NONE AFFORDABLE\n";
                 }
-                
+
                 // Show a few unaffordable examples (limit to 3 to save space)
                 if (!empty($unaffordableBuildings)) {
                     $section .= "    ✗ NOT AFFORDABLE (examples): " . implode(' | ', array_slice($unaffordableBuildings, 0, 3)) . "\n";
@@ -807,7 +824,7 @@ class BotAIService
             } else {
                 $section .= "  BUILD_BUILDING: ✗ BLOCKED (queue busy)\n";
             }
-            
+
             // Check BUILD_UNITS affordability (only if shipyard exists)
             $hasShipyard = false;
             foreach ($planet['buildings'] ?? [] as $building) {
@@ -816,15 +833,15 @@ class BotAIService
                     break;
                 }
             }
-            
+
             if ($hasShipyard && !$planet['unit_queue_busy']) {
                 $section .= "  BUILD_UNITS (queue available, shipyard exists):\n";
                 $affordableUnits = [];
                 $unaffordableUnits = [];
-                
+
                 // Get unit prerequisites for requirement checking
                 $unitPrereqs = ResourceCostProvider::getUnitPrerequisites();
-                
+
                 // Get shipyard level
                 $shipyardLevel = 0;
                 foreach ($planet['buildings'] ?? [] as $building) {
@@ -833,7 +850,7 @@ class BotAIService
                         break;
                     }
                 }
-                
+
                 // Get research levels (from gameState, which is passed to this method)
                 $researchLevels = [];
                 if (isset($gameState['research']['technologies'])) {
@@ -841,33 +858,35 @@ class BotAIService
                         $researchLevels[$tech['tech_type']] = $tech['current_level'];
                     }
                 }
-                
+
                 // Check common units
-                $unitsToCheck = ['light_fighter', 'heavy_fighter', 'cruiser', 'small_cargo', 
+                $unitsToCheck = ['light_fighter', 'heavy_fighter', 'cruiser', 'small_cargo',
                                 'large_cargo', 'espionage_probe', 'rocket_launcher', 'light_laser'];
-                
+
                 foreach ($unitsToCheck as $unit) {
                     $cost = ResourceCostProvider::getUnitCosts()[$unit] ?? null;
-                    if (!$cost) continue;
-                    
+                    if (!$cost) {
+                        continue;
+                    }
+
                     // Check resources
                     $hasResources = $planet['metal_stored'] >= $cost['metal'] &&
                                    $planet['crystal_stored'] >= $cost['crystal'] &&
                                    $planet['deuterium_stored'] >= $cost['deuterium'];
-                    
+
                     // Check requirements
                     $requirementsMet = true;
                     $missingReqs = [];
-                    
+
                     if (isset($unitPrereqs[$unit])) {
                         $prereq = $unitPrereqs[$unit];
-                        
+
                         // Check shipyard requirement
                         if (isset($prereq['shipyard']) && $shipyardLevel < $prereq['shipyard']) {
                             $requirementsMet = false;
                             $missingReqs[] = "shipyard({$prereq['shipyard']})";
                         }
-                        
+
                         // Check research requirements
                         if (isset($prereq['requirements']) && !empty($prereq['requirements'])) {
                             foreach ($prereq['requirements'] as $req) {
@@ -879,7 +898,7 @@ class BotAIService
                             }
                         }
                     }
-                    
+
                     // Unit is affordable only if both resources AND requirements are met
                     if ($hasResources && $requirementsMet) {
                         $affordableUnits[] = $unit;
@@ -902,13 +921,13 @@ class BotAIService
                         $unaffordableUnits[] = "{$unit}: " . implode(', ', $missing);
                     }
                 }
-                
+
                 if (!empty($affordableUnits)) {
                     $section .= "    ✓ AFFORDABLE: " . implode(', ', $affordableUnits) . "\n";
                 } else {
                     $section .= "    ✗ NONE AFFORDABLE\n";
                 }
-                
+
                 // Show a few unaffordable examples
                 if (!empty($unaffordableUnits)) {
                     $section .= "    ✗ NOT AFFORDABLE (examples): " . implode(' | ', array_slice($unaffordableUnits, 0, 3)) . "\n";
@@ -918,10 +937,10 @@ class BotAIService
             } else {
                 $section .= "  BUILD_UNITS: ✗ BLOCKED (queue busy)\n";
             }
-            
+
             $section .= "\n";
         }
-        
+
         // Check START_RESEARCH affordability (empire-wide)
         $hasResearchLab = false;
         $maxResearchLabLevel = 0;
@@ -933,12 +952,12 @@ class BotAIService
                 }
             }
         }
-        
+
         $researchQueueBusy = $gameState['research']['research_queue_busy'] ?? false;
-        
+
         if ($hasResearchLab && !$researchQueueBusy) {
             $section .= "START_RESEARCH (empire-wide, queue available):\n";
-            
+
             // Calculate total empire resources (sum across all planets)
             $totalMetal = 0;
             $totalCrystal = 0;
@@ -948,17 +967,17 @@ class BotAIService
                 $totalCrystal += $planet['crystal_stored'];
                 $totalDeuterium += $planet['deuterium_stored'];
             }
-            
+
             $section .= "  Total empire resources: {$totalMetal}M, {$totalCrystal}C, {$totalDeuterium}D\n";
-            
+
             $affordableResearch = [];
             $unaffordableResearch = [];
-            
+
             // Check common research
-            $researchToCheck = ['energy_technology', 'combustion_drive', 'laser_technology', 
+            $researchToCheck = ['energy_technology', 'combustion_drive', 'laser_technology',
                                'weapon_technology', 'shielding_technology', 'armor_technology',
                                'computer_technology', 'espionage_technology', 'astrophysics'];
-            
+
             foreach ($researchToCheck as $research) {
                 // Find current level
                 $currentLevel = 0;
@@ -968,14 +987,14 @@ class BotAIService
                         break;
                     }
                 }
-                
+
                 $nextLevel = $currentLevel + 1;
                 $cost = ResourceCostProvider::calculateResearchCost($research, $nextLevel);
-                
+
                 $isAffordable = $totalMetal >= $cost['metal'] &&
                                $totalCrystal >= $cost['crystal'] &&
                                $totalDeuterium >= $cost['deuterium'];
-                
+
                 if ($isAffordable) {
                     $affordableResearch[] = "{$research}({$nextLevel})";
                 } else {
@@ -992,13 +1011,13 @@ class BotAIService
                     $unaffordableResearch[] = "{$research}({$nextLevel}): " . implode(', ', $missing);
                 }
             }
-            
+
             if (!empty($affordableResearch)) {
                 $section .= "  ✓ AFFORDABLE: " . implode(', ', $affordableResearch) . "\n";
             } else {
                 $section .= "  ✗ NONE AFFORDABLE\n";
             }
-            
+
             // Show a few unaffordable examples
             if (!empty($unaffordableResearch)) {
                 $section .= "  ✗ NOT AFFORDABLE (examples): " . implode(' | ', array_slice($unaffordableResearch, 0, 3)) . "\n";
@@ -1010,12 +1029,12 @@ class BotAIService
                 $section .= "START_RESEARCH: ✗ BLOCKED (queue busy)\n";
             }
         }
-        
+
         $section .= "\n";
         $section .= "NOTE: Use this affordability information to make informed decisions.\n";
         $section .= "Only propose actions that are marked as AFFORDABLE (✓).\n";
         $section .= "If nothing is affordable, return empty actions array and wait for resources.\n\n";
-        
+
         return $section;
     }
 
@@ -1028,15 +1047,15 @@ class BotAIService
         $prompt .= "Strategy: {$gameState['strategy']}\n";
         $prompt .= "Skill Level: {$gameState['skill_level']}/10\n";
         $prompt .= "\n";
-        
+
         // Add validation warnings if present - important for AI to know about data issues
         if (!empty($validationWarnings)) {
             $prompt .= "⚠️ GAME STATE ALERTS (CRITICAL - MUST ADDRESS IMMEDIATELY):\n";
-            
+
             // Separate energy-related warnings (highest priority)
             $energyWarnings = [];
             $otherWarnings = [];
-            
+
             foreach ($validationWarnings as $warning) {
                 if (stripos($warning, 'energy') !== false || stripos($warning, 'Energy') !== false) {
                     $energyWarnings[] = $warning;
@@ -1044,7 +1063,7 @@ class BotAIService
                     $otherWarnings[] = $warning;
                 }
             }
-            
+
             // Show energy warnings first with emphasis
             if (!empty($energyWarnings)) {
                 $prompt .= "\n🚨 CRITICAL ENERGY DEFICIT DETECTED - TOP PRIORITY:\n";
@@ -1055,7 +1074,7 @@ class BotAIService
                 }
                 $prompt .= "\n";
             }
-            
+
             // Show other warnings
             if (!empty($otherWarnings)) {
                 foreach ($otherWarnings as $warning) {
@@ -1064,12 +1083,12 @@ class BotAIService
                 $prompt .= "\n";
             }
         }
-        
+
         $prompt .= "=== GAME STATE ===\n\n";
-        
+
         // Build affordability section early so we can reference it
         $affordabilitySection = $this->buildAffordabilitySection($gameState);
-        
+
         // PLANETS
         $prompt .= "PLANETS: " . count($gameState['planets'] ?? []) . "\n\n";
         foreach ($gameState['planets'] ?? [] as $planet) {
@@ -1079,13 +1098,13 @@ class BotAIService
             $prompt .= "  Coordinates: {$coordStr}\n";
             $prompt .= "  Diameter: {$planet['diameter']} km\n";
             $prompt .= "  Max Fields: {$planet['field_max']}\n";
-            
+
             // Resources with storage info
             $prompt .= "  Resources:\n";
             $metalPercent = $planet['metal_capacity'] > 0 ? round(($planet['metal_stored'] / $planet['metal_capacity']) * 100, 1) : 0;
             $crystalPercent = $planet['crystal_capacity'] > 0 ? round(($planet['crystal_stored'] / $planet['crystal_capacity']) * 100, 1) : 0;
             $deuteriumPercent = $planet['deuterium_capacity'] > 0 ? round(($planet['deuterium_stored'] / $planet['deuterium_capacity']) * 100, 1) : 0;
-            
+
             $prompt .= "    metal: {$planet['metal_stored']} / {$planet['metal_capacity']} ({$metalPercent}% full)\n";
             $prompt .= "    crystal: {$planet['crystal_stored']} / {$planet['crystal_capacity']} ({$crystalPercent}% full)\n";
             $prompt .= "    deuterium: {$planet['deuterium_stored']} / {$planet['deuterium_capacity']} ({$deuteriumPercent}% full)\n";
@@ -1094,13 +1113,13 @@ class BotAIService
                 $prompt .= " (DEFICIT! Production reduced by 50%)";
             }
             $prompt .= "\n";
-            
+
             // Production
             $prompt .= "  Production (per hour):\n";
             $prompt .= "    metal: {$planet['metal_production']}\n";
             $prompt .= "    crystal: {$planet['crystal_production']}\n";
             $prompt .= "    deuterium: {$planet['deuterium_production']}\n";
-            
+
             // Queue Status with details
             $prompt .= "  Queues:\n";
             $prompt .= "    build_queue_busy: " . ($planet['build_queue_busy'] ? 'true' : 'false');
@@ -1108,7 +1127,7 @@ class BotAIService
                 $prompt .= " ({$planet['build_queue_count']} items in queue)";
             }
             $prompt .= "\n";
-            
+
             // Show building queue items if any
             if (!empty($planet['build_queue_items'])) {
                 foreach ($planet['build_queue_items'] as $item) {
@@ -1117,13 +1136,13 @@ class BotAIService
                     $prompt .= "      → {$item['building']} level {$item['level']} ({$status}, {$timeRemaining} remaining)\n";
                 }
             }
-            
+
             $prompt .= "    unit_queue_busy: " . ($planet['unit_queue_busy'] ? 'true' : 'false');
             if (!empty($planet['unit_queue_items'])) {
                 $prompt .= " (" . count($planet['unit_queue_items']) . " items)";
             }
             $prompt .= "\n";
-            
+
             // Show unit queue items if any (includes both ships and defense)
             if (!empty($planet['unit_queue_items'])) {
                 // Separate ships and defense for clarity
@@ -1136,7 +1155,7 @@ class BotAIService
                         $ships[] = $item;
                     }
                 }
-                
+
                 if (!empty($ships)) {
                     $prompt .= "      Ships in queue:\n";
                     foreach ($ships as $item) {
@@ -1145,7 +1164,7 @@ class BotAIService
                         $prompt .= "        → {$item['unit']} x{$item['quantity']} ({$item['remaining']} remaining, {$status}, {$timeRemaining} remaining)\n";
                     }
                 }
-                
+
                 if (!empty($defenses)) {
                     $prompt .= "      Defenses in queue:\n";
                     foreach ($defenses as $item) {
@@ -1155,7 +1174,7 @@ class BotAIService
                     }
                 }
             }
-            
+
             // Check for shipyard
             $hasShipyard = false;
             $shipyardLevel = 0;
@@ -1167,7 +1186,7 @@ class BotAIService
                 }
             }
             $prompt .= "    shipyard_available: " . ($hasShipyard ? "true (level {$shipyardLevel})" : "false") . "\n";
-            
+
             // Check for robotics factory (affects build speed)
             $roboticsLevel = 0;
             foreach ($planet['buildings'] ?? [] as $building) {
@@ -1179,7 +1198,7 @@ class BotAIService
             if ($roboticsLevel > 0) {
                 $prompt .= "    robot_factory_level: {$roboticsLevel} (faster building)\n";
             }
-            
+
             // Check for nanite factory (much faster building)
             $naniteLevel = 0;
             foreach ($planet['buildings'] ?? [] as $building) {
@@ -1191,7 +1210,7 @@ class BotAIService
             if ($naniteLevel > 0) {
                 $prompt .= "    nano_factory_level: {$naniteLevel} (very fast building)\n";
             }
-            
+
             // Buildings
             $prompt .= "  Buildings:\n";
             if (!empty($planet['buildings'])) {
@@ -1201,7 +1220,7 @@ class BotAIService
             } else {
                 $prompt .= "    (none)\n";
             }
-            
+
             // Defenses
             if (!empty($planet['defenses'])) {
                 $prompt .= "  Defenses:\n";
@@ -1209,7 +1228,7 @@ class BotAIService
                     $prompt .= "    {$d['type']}: {$d['count']}\n";
                 }
             }
-            
+
             // Ships
             if (!empty($planet['ships'])) {
                 $prompt .= "  Ships:\n";
@@ -1217,10 +1236,10 @@ class BotAIService
                     $prompt .= "    {$s['type']}: {$s['count']}\n";
                 }
             }
-            
+
             $prompt .= "\n";
         }
-        
+
         // RESEARCH
         $prompt .= "RESEARCH:\n";
         $prompt .= "  research_queue_busy: " . ($gameState['research']['research_queue_busy'] ? 'true' : 'false');
@@ -1228,7 +1247,7 @@ class BotAIService
             $prompt .= " (" . count($gameState['research']['research_queue_items']) . " items)";
         }
         $prompt .= "\n";
-        
+
         // Show research queue items if any
         if (!empty($gameState['research']['research_queue_items'])) {
             foreach ($gameState['research']['research_queue_items'] as $item) {
@@ -1237,7 +1256,7 @@ class BotAIService
                 $prompt .= "    → {$item['technology']} level {$item['level']} on planet {$item['planet_id']} ({$status}, {$timeRemaining} remaining)\n";
             }
         }
-        
+
         // Check research lab
         $hasResearchLab = false;
         $maxResearchLabLevel = 0;
@@ -1250,7 +1269,7 @@ class BotAIService
             }
         }
         $prompt .= "  research_lab_available: " . ($hasResearchLab ? "true (level {$maxResearchLabLevel})" : "false") . "\n";
-        
+
         $prompt .= "  Technologies:\n";
         if (!empty($gameState['research']['technologies'])) {
             foreach ($gameState['research']['technologies'] as $tech) {
@@ -1260,12 +1279,12 @@ class BotAIService
             $prompt .= "    (none)\n";
         }
         $prompt .= "\n";
-        
+
         // FLEET
         $prompt .= "FLEET (empire-wide):\n";
         $prompt .= "  fleet_slots: {$gameState['fleet']['fleet_slots_used']} / {$gameState['fleet']['fleet_slots_max']}\n";
         $prompt .= "  expedition_slots: {$gameState['fleet']['expedition_slots_used']} / {$gameState['fleet']['expedition_slots_max']}\n";
-        
+
         if (!empty($gameState['fleet']['composition'])) {
             $prompt .= "  Ships on planets:\n";
             foreach ($gameState['fleet']['composition'] as $shipType => $count) {
@@ -1274,7 +1293,7 @@ class BotAIService
         } else {
             $prompt .= "  Ships on planets: (none)\n";
         }
-        
+
         if (!empty($gameState['fleet']['active_missions'])) {
             $prompt .= "  Active missions (" . count($gameState['fleet']['active_missions']) . "):\n";
             $missionTypeNames = [
@@ -1306,7 +1325,7 @@ class BotAIService
             $prompt .= "  Active missions: (none)\n";
         }
         $prompt .= "\n";
-        
+
         // THREATS
         if (!empty($gameState['threats']['threats'])) {
             $prompt .= "THREATS:\n";
@@ -1316,10 +1335,10 @@ class BotAIService
             }
             $prompt .= "\n";
         }
-        
+
         // AFFORDABILITY STATUS
         $prompt .= $affordabilitySection;
-        
+
         // LAST TURN
         if (!empty($lastTurnSummary)) {
             $prompt .= "LAST TURN:\n";
@@ -1334,12 +1353,12 @@ class BotAIService
             }
             $prompt .= "\n";
         }
-        
+
         $prompt .= "=== YOUR TASK ===\n";
         $prompt .= "Let's think step by step.\n";
         $prompt .= "Analyze the game state above and decide which actions to take this turn.\n";
         $prompt .= "Return valid JSON with your decision.\n";
-        
+
         return $prompt;
     }
 
@@ -1351,12 +1370,12 @@ class BotAIService
     {
         // Detect provider type from URL
         $provider = $this->detectProvider($apiUrl);
-        
+
         // Route to appropriate API handler
         if ($provider === 'gemini') {
             return $this->callGeminiAPI($botId, $apiUrl, $apiKey, $model, $messages);
         }
-        
+
         // Default to OpenAI-compatible API
         return $this->callOpenAIAPI($botId, $apiUrl, $apiKey, $model, $messages);
     }
@@ -1368,7 +1387,7 @@ class BotAIService
     protected function callOpenAIAPI(int $botId, string $apiUrl, string $apiKey, string $model, array $messages): array
     {
         $timeout = config('ogame.bots.ai.timeout_seconds', 30);
-        
+
         try {
             $response = Http::timeout($timeout)
                 ->withHeaders([
@@ -1384,7 +1403,7 @@ class BotAIService
 
             if ($response->successful()) {
                 $data = $response->json();
-                
+
                 // Validate OpenAI-compatible response structure
                 if (!isset($data['choices']) || !is_array($data['choices']) || empty($data['choices'])) {
                     $this->botLog()->error("AI API returned invalid structure", [
@@ -1393,7 +1412,7 @@ class BotAIService
                     ]);
                     return ['success' => false, 'error' => 'Invalid API response structure: missing choices array'];
                 }
-                
+
                 if (!isset($data['choices'][0]['message']['content'])) {
                     $this->botLog()->error("AI API returned invalid structure", [
                         'response' => $data,
@@ -1401,18 +1420,18 @@ class BotAIService
                     ]);
                     return ['success' => false, 'error' => 'Invalid API response structure: missing message content'];
                 }
-                
+
                 // Extract token usage details
                 $promptTokens = $data['usage']['prompt_tokens'] ?? 0;
                 $completionTokens = $data['usage']['completion_tokens'] ?? 0;
                 $totalTokens = $data['usage']['total_tokens'] ?? ($promptTokens + $completionTokens);
-                
+
                 $cost = $this->calculateCost($model, $totalTokens);
                 $content = $data['choices'][0]['message']['content'];
-                
+
                 // Write to separate file for easy viewing (no Laravel log)
                 $this->writeResponseToFile($botId, $model, $content, $totalTokens, $cost);
-                
+
                 return [
                     'success' => true,
                     'data' => $data,
@@ -1424,7 +1443,7 @@ class BotAIService
             // Parse error response if available
             $errorBody = $response->json();
             $errorMessage = 'API returned ' . $response->status();
-            
+
             // Try to extract OpenAI-style error message
             if (isset($errorBody['error']['message'])) {
                 $errorMessage .= ': ' . $errorBody['error']['message'];
@@ -1433,13 +1452,13 @@ class BotAIService
             } elseif (isset($errorBody['message'])) {
                 $errorMessage .= ': ' . $errorBody['message'];
             }
-            
+
             $this->botLog()->warning("AI API failed", [
                 'status' => $response->status(),
                 'error_message' => $errorMessage,
                 'body' => $response->body(),
             ]);
-            
+
             return [
                 'success' => false,
                 'error' => $errorMessage,
@@ -1450,14 +1469,14 @@ class BotAIService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 
     /**
      * Call Gemini API with transformed messages
-     * 
+     *
      * @param int $botId Bot ID for logging
      * @param string $apiKey Gemini API key
      * @param string $model Gemini model name (e.g., "gemini-1.5-flash")
@@ -1467,14 +1486,14 @@ class BotAIService
     protected function callGeminiAPI(int $botId, string $apiUrl, string $apiKey, string $model, array $messages): array
     {
         $timeout = config('ogame.bots.ai.timeout_seconds', 30);
-        
+
         try {
             // Transform messages to Gemini format
             $geminiRequest = $this->transformMessagesToGemini($messages);
-            
+
             // Build Gemini endpoint URL with API key
             $endpoint = $this->buildGeminiEndpoint($apiUrl, $model, $apiKey);
-            
+
             // Make HTTP request to Gemini API
             // Note: Gemini uses API key in URL, not Authorization header
             $response = Http::timeout($timeout)
@@ -1485,23 +1504,23 @@ class BotAIService
 
             if ($response->successful()) {
                 $data = $response->json();
-                
+
                 // Parse and normalize Gemini response
                 $result = $this->parseGeminiResponse($data, $model);
-                
+
                 if ($result['success']) {
                     // Write to separate file for easy viewing (no Laravel log)
                     $content = $result['data']['choices'][0]['message']['content'];
                     $this->writeResponseToFile($botId, $model, $content, $result['tokens'], $result['cost']);
                 }
-                
+
                 return $result;
             }
 
             // Parse error response if available
             $errorBody = $response->json();
             $errorMessage = 'Gemini API returned ' . $response->status();
-            
+
             // Try to extract Gemini-style error message
             if (isset($errorBody['error']['message'])) {
                 $errorMessage .= ': ' . $errorBody['error']['message'];
@@ -1510,13 +1529,13 @@ class BotAIService
             } elseif (isset($errorBody['message'])) {
                 $errorMessage .= ': ' . $errorBody['message'];
             }
-            
+
             $this->botLog()->warning("Gemini API failed", [
                 'status' => $response->status(),
                 'error_message' => $errorMessage,
                 'body' => $response->body(),
             ]);
-            
+
             return [
                 'success' => false,
                 'error' => $errorMessage,
@@ -1527,14 +1546,14 @@ class BotAIService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 
     /**
      * Parse Gemini API response and normalize to OpenAI format
-     * 
+     *
      * @param array $geminiResponse The raw response from Gemini API
      * @return array Normalized response with 'success', 'data', 'tokens', and 'cost' keys
      */
@@ -1542,23 +1561,23 @@ class BotAIService
     {
         // Validate response structure - check for required fields
         if (!isset($geminiResponse['candidates']) || !is_array($geminiResponse['candidates'])) {
-                    $this->botLog()->error("Gemini API returned invalid structure", [
+            $this->botLog()->error("Gemini API returned invalid structure", [
                 'response' => $geminiResponse,
                 'missing' => 'candidates array',
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: missing candidates array'];
         }
-        
+
         if (empty($geminiResponse['candidates'])) {
-                    $this->botLog()->error("Gemini API returned empty candidates", [
+            $this->botLog()->error("Gemini API returned empty candidates", [
                 'response' => $geminiResponse,
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: empty candidates array'];
         }
-        
+
         // Extract text content from first candidate
         $candidate = $geminiResponse['candidates'][0];
-        
+
         // Check if response was truncated due to MAX_TOKENS
         $finishReason = $candidate['finishReason'] ?? null;
         if ($finishReason === 'MAX_TOKENS') {
@@ -1572,19 +1591,19 @@ class BotAIService
                 'raw_response' => json_encode($geminiResponse),
             ];
         }
-        
+
         // Check if parts exists and has content
         if (!isset($candidate['content']['parts']) || !is_array($candidate['content']['parts']) || empty($candidate['content']['parts'])) {
-                    $this->botLog()->error("Gemini API returned invalid candidate structure", [
+            $this->botLog()->error("Gemini API returned invalid candidate structure", [
                 'candidate' => $candidate,
                 'missing' => 'content.parts array',
                 'finishReason' => $finishReason,
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: missing content.parts array'];
         }
-        
+
         $text = $candidate['content']['parts'][0]['text'] ?? null;
-        
+
         if ($text === null || trim($text) === '') {
             $this->botLog()->error("Gemini API returned no text content", [
                 'parts' => $candidate['content']['parts'],
@@ -1592,7 +1611,7 @@ class BotAIService
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: missing text in parts'];
         }
-        
+
         // Extract token usage from usageMetadata
         if (!isset($geminiResponse['usageMetadata'])) {
             $this->botLog()->error("Gemini API returned no usage metadata", [
@@ -1600,14 +1619,14 @@ class BotAIService
             ]);
             return ['success' => false, 'error' => 'Invalid Gemini response structure: missing usageMetadata'];
         }
-        
+
         $promptTokens = $geminiResponse['usageMetadata']['promptTokenCount'] ?? 0;
         $completionTokens = $geminiResponse['usageMetadata']['candidatesTokenCount'] ?? 0;
         $totalTokens = $geminiResponse['usageMetadata']['totalTokenCount'] ?? ($promptTokens + $completionTokens);
-        
+
         // Calculate cost using Gemini pricing
         $cost = $this->calculateCost($model, $totalTokens);
-        
+
         // Normalize to OpenAI format
         $normalizedResponse = [
             'choices' => [
@@ -1623,7 +1642,7 @@ class BotAIService
                 'total_tokens' => $totalTokens,
             ],
         ];
-        
+
         return [
             'success' => true,
             'data' => $normalizedResponse,
@@ -1635,7 +1654,7 @@ class BotAIService
     /**
      * Build Gemini API endpoint URL
      * Constructs URL in format: {baseUrl}/v1beta/models/{model}:generateContent?key={apiKey}
-     * 
+     *
      * @param string $baseUrl The base URL from bot configuration
      * @param string $model The model name (e.g., "gemini-1.5-flash")
      * @param string $apiKey The API key for authentication
@@ -1645,13 +1664,13 @@ class BotAIService
     {
         // Remove trailing slash from base URL
         $baseUrl = rtrim($baseUrl, '/');
-        
+
         // Construct Gemini endpoint: {baseUrl}/v1beta/models/{model}:generateContent
         $endpoint = "{$baseUrl}/v1beta/models/{$model}:generateContent";
-        
+
         // Append API key as query parameter
         $endpoint .= "?key={$apiKey}";
-        
+
         return $endpoint;
     }
 
@@ -1663,12 +1682,12 @@ class BotAIService
     {
         // Remove trailing slash
         $apiUrl = rtrim($apiUrl, '/');
-        
+
         // If URL already ends with /chat/completions, use as-is
         if (str_ends_with($apiUrl, '/chat/completions')) {
             return $apiUrl;
         }
-        
+
         // Otherwise append /chat/completions
         return $apiUrl . '/chat/completions';
     }
@@ -1684,17 +1703,17 @@ class BotAIService
         $rates = [
             // OpenAI models
             'gpt-4o-mini' => 0.15,
-            
+
             // Groq models
             'llama3-70b-8192' => 0.05,
             'llama2' => 0,
-            
+
             // Gemini models (pricing per 1M tokens, averaged input/output)
             'gemini-1.5-flash' => 0.075,      // $0.075/$0.30 per 1M tokens (avg)
             'gemini-1.5-pro' => 1.25,         // $1.25/$5.00 per 1M tokens (avg)
             'gemini-1.0-pro' => 0.50,         // $0.50/$1.50 per 1M tokens (avg)
         ];
-        
+
         // Use default rate for unknown models
         $rate = $rates[$model] ?? 0.10;
         return ($tokens / 1_000_000) * $rate;
@@ -1709,20 +1728,20 @@ class BotAIService
             $date = date('Y-m-d');
             $timestamp = date('Y-m-d H:i:s');
             $logDir = storage_path("logs/bots/bot-{$botId}");
-            
+
             if (!is_dir($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            
+
             $logFile = "{$logDir}/{$date}.log";
-            
+
             $content = str_repeat('=', 100) . "\n";
             $content .= "🔄 SWITCHING TO BACKUP PROVIDER [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Bot ID: {$botId}\n";
             $content .= "Backup Model: {$backupModel}\n";
             $content .= "Reason: Primary provider failed - {$primaryError}\n\n";
-            
+
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
@@ -1739,20 +1758,20 @@ class BotAIService
             $date = date('Y-m-d');
             $timestamp = date('Y-m-d H:i:s');
             $logDir = storage_path("logs/bots/bot-{$botId}");
-            
+
             if (!is_dir($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            
+
             $logFile = "{$logDir}/{$date}.log";
-            
+
             $content = str_repeat('=', 100) . "\n";
             $content .= "⚠️  QUOTA EXCEEDED [{$timestamp}]\n";
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Bot ID: {$botId}\n";
             $content .= "Message: {$message}\n";
             $content .= "\nAPI call was skipped due to quota limit.\n\n";
-            
+
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
@@ -1769,17 +1788,17 @@ class BotAIService
             $date = date('Y-m-d');
             $timestamp = date('Y-m-d H:i:s');
             $logDir = storage_path("logs/bots/bot-{$botId}");
-            
+
             if (!is_dir($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            
+
             $logFile = "{$logDir}/{$date}.log";
-            
+
             // Add searchable tag line
             $errorTag = str_replace([' ', "\n", "\r"], ['_', '', ''], substr($errorMessage, 0, 50));
             $searchableLine = "[API_ERROR] [{$timestamp}] Bot:{$botId} Model:{$model} Error:{$errorTag}";
-            
+
             $content = str_repeat('=', 100) . "\n";
             $content .= "{$searchableLine}\n";
             $content .= str_repeat('=', 100) . "\n";
@@ -1788,22 +1807,22 @@ class BotAIService
             $content .= "Model: {$model}\n";
             $content .= "Bot ID: {$botId}\n";
             $content .= "Error: {$errorMessage}\n\n";
-            
-            // NOTE: Raw response logging disabled to reduce log file size     
+
+            // NOTE: Raw response logging disabled to reduce log file size
             $content .= str_repeat('-', 100) . "\n";
             $content .= "RAW RESPONSE:\n";
             $content .= str_repeat('-', 100) . "\n";
-            
+
             // Try to pretty-print JSON response
             $decoded = json_decode($rawResponse, true);
             if ($decoded) {
                 $content .= json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
             } else {
                 $content .= $rawResponse . "\n";
-            }            
-            
+            }
+
             $content .= "\n\n";
-            
+
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
@@ -1820,17 +1839,17 @@ class BotAIService
             $date = date('Y-m-d');
             $timestamp = date('Y-m-d H:i:s');
             $logDir = storage_path("logs/bots/bot-{$botId}");
-            
+
             // Create directory if it doesn't exist
             if (!is_dir($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            
+
             $logFile = "{$logDir}/{$date}.log";
-            
+
             // Add searchable tag line
             $searchableLine = "[API_REQUEST] [{$timestamp}] Bot:{$botId} Model:{$model}";
-            
+
             $content = str_repeat('=', 100) . "\n";
             $content .= "{$searchableLine}\n";
             $content .= str_repeat('=', 100) . "\n";
@@ -1838,26 +1857,26 @@ class BotAIService
             $content .= str_repeat('=', 100) . "\n";
             $content .= "Model: {$model}\n";
             $content .= "Bot ID: {$botId}\n\n";
-            
+
             foreach ($messages as $msg) {
                 $role = strtoupper($msg['role'] ?? 'unknown');
                 $msgContent = $msg['content'] ?? '';
-                
+
                 $content .= str_repeat('-', 100) . "\n";
                 $content .= "[{$role}]\n";
                 $content .= str_repeat('-', 100) . "\n";
                 $content .= $msgContent . "\n\n";
             }
-            
+
             $content .= "\n";
-            
+
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
             $this->botLog()->warning("Failed to write prompt to file: " . $e->getMessage());
         }
     }
-    
+
     /**
      * Write response to log file (same file as prompt)
      */
@@ -1867,17 +1886,17 @@ class BotAIService
             $date = date('Y-m-d');
             $timestamp = date('Y-m-d H:i:s');
             $logDir = storage_path("logs/bots/bot-{$botId}");
-            
+
             // Create directory if it doesn't exist
             if (!is_dir($logDir)) {
                 mkdir($logDir, 0755, true);
             }
-            
+
             $logFile = "{$logDir}/{$date}.log";
-            
+
             // Add searchable tag line
             $searchableLine = "[API_RESPONSE] [{$timestamp}] Bot:{$botId} Model:{$model} Tokens:{$tokens} Cost:$" . number_format($cost, 6);
-            
+
             $content = str_repeat('=', 100) . "\n";
             $content .= "{$searchableLine}\n";
             $content .= str_repeat('=', 100) . "\n";
@@ -1887,29 +1906,29 @@ class BotAIService
             $content .= "Bot ID: {$botId}\n";
             $content .= "Tokens: {$tokens}\n";
             $content .= "Cost: $" . number_format($cost, 6) . "\n\n";
-            
+
             $content .= str_repeat('-', 100) . "\n";
             $content .= "RAW RESPONSE:\n";
             $content .= str_repeat('-', 100) . "\n";
-            
+
             // Preprocess response to remove markdown code blocks before parsing
             $cleanedResponse = $this->preprocessAIResponse($response);
-            
+
             // Try to pretty-print JSON
             $decoded = json_decode($cleanedResponse, true);
             if ($decoded) {
                 $content .= json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-                
+
                 // Add analysis
                 $content .= "\n";
                 $content .= str_repeat('-', 100) . "\n";
                 $content .= "ANALYSIS:\n";
                 $content .= str_repeat('-', 100) . "\n";
-                
+
                 if (isset($decoded['actions'])) {
                     $actionCount = count($decoded['actions']);
                     $content .= "Actions: {$actionCount}\n";
-                    
+
                     if ($actionCount > 0) {
                         foreach ($decoded['actions'] as $action) {
                             $content .= "  - " . ($action['action_type'] ?? 'unknown') . " → " . ($action['target'] ?? 'N/A') . "\n";
@@ -1918,7 +1937,7 @@ class BotAIService
                         $content .= "  (Bot decided to WAIT)\n";
                     }
                 }
-                
+
                 if (isset($decoded['overall_strategy'])) {
                     $content .= "Strategy: " . $decoded['overall_strategy'] . "\n";
                 }
@@ -1926,9 +1945,9 @@ class BotAIService
                 $content .= $response . "\n";
                 $content .= "\n⚠️  Response is not valid JSON\n";
             }
-            
+
             $content .= "\n\n";
-            
+
             file_put_contents($logFile, $content, FILE_APPEND);
         } catch (\Exception $e) {
             // Don't fail if logging fails
@@ -1965,14 +1984,14 @@ class BotAIService
     {
         // Remove <think> tags and their content (common in reasoning models)
         $cleaned = preg_replace('/<think>.*?<\/think>/s', '', $rawResponse);
-        
+
         // Remove markdown code blocks - handle both ```json and ``` variants
         // This handles cases like: ```json{"actions": []}```
         $cleaned = preg_replace('/```(?:json)?\s*(.*?)\s*```/s', '$1', $cleaned);
-        
+
         // Trim whitespace
         $cleaned = trim($cleaned);
-        
+
         // If the response starts with text before JSON, try to extract just the JSON
         if (!str_starts_with($cleaned, '{') && !str_starts_with($cleaned, '[')) {
             // Find the first { or [ and extract from there
@@ -1980,8 +1999,7 @@ class BotAIService
                 $cleaned = $matches[1];
             }
         }
-        
+
         return $cleaned;
     }
 }
-

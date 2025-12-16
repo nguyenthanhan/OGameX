@@ -24,24 +24,23 @@ class ProcessBotsNow extends Command
     /**
      * Execute the console command.
      */
-    public function handle(BotService $botService)
+    public function handle(BotService $botService): int
     {
         $botId = $this->argument('bot');
 
         if ($botId) {
             // Process specific bot
             $this->info("🤖 Processing Bot {$botId}...\n");
-            
+
             try {
-                $botService->processBotTurn($botId);
+                $botService->processBotTurn((int) $botId);
                 $this->info("✅ Bot {$botId} processed successfully!");
-                
+
                 // Show log file location
                 $date = date('Y-m-d');
                 $logFile = storage_path("logs/bots/bot-{$botId}/{$date}.log");
                 $this->line("\n💡 View log:");
                 $this->line("  cat {$logFile}");
-                
             } catch (\Exception $e) {
                 $this->error("❌ Failed: " . $e->getMessage());
                 return 1;
@@ -49,21 +48,21 @@ class ProcessBotsNow extends Command
         } else {
             // Process all bots
             $this->info("🤖 Processing all enabled bots...\n");
-            
+
             $result = $botService->processAllBots();
-            
+
             $this->info("✅ Processing completed!");
             $this->line("  Processed: {$result['processed']}");
             $this->line("  Errors: " . count($result['errors']));
             $this->line("  Stale locks cleared: {$result['stale_locks_cleared']}");
-            
+
             if (!empty($result['errors'])) {
                 $this->line("\n⚠️  Errors:");
                 foreach ($result['errors'] as $error) {
                     $this->line("  Bot {$error['bot_id']}: {$error['error']}");
                 }
             }
-            
+
             if ($result['processed'] > 0) {
                 $date = date('Y-m-d');
                 $this->line("\n💡 View logs:");

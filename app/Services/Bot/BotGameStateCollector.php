@@ -8,7 +8,7 @@ use OGame\Services\PlanetService;
 
 /**
  * Bot Game State Collector
- * 
+ *
  * Collects comprehensive game state for bot decision making.
  * Returns minified data to reduce AI token usage.
  */
@@ -16,23 +16,23 @@ class BotGameStateCollector
 {
     /**
      * Collect complete game state for a bot
-     * 
+     *
      * @param User $bot
      * @return array Minified game state
      */
     public function collectGameState(User $bot): array
     {
         $player = new PlayerService($bot->id);
-        
+
         // Update player state (same as GlobalGame middleware does for regular players)
         // 1. Update research queue and player timestamp
         $player->update();
-        
+
         // 2. Update fleet missions (process arrived missions)
         $player->updateFleetMissions();
-        
+
         // 3. Planet updates happen in collectPlanets() method
-        
+
         return [
             'bot_id' => $bot->id,
             'strategy' => $bot->bot_strategy,
@@ -51,7 +51,7 @@ class BotGameStateCollector
     protected function collectPlanets(PlayerService $player): array
     {
         $planets = [];
-        
+
         foreach ($player->planets->all() as $planet) {
             // Update planet resources before collecting state
             // Wrap in try-catch to prevent division by zero errors from breaking bot turns
@@ -67,7 +67,7 @@ class BotGameStateCollector
                 \Log::channel('bot')->warning("Bot GameStateCollector: Error updating planet {$planet->getPlanetId()}: " . $e->getMessage());
                 continue;
             }
-            
+
             // Include all active planets (never skip - even new planets start with 0 resources)
             // The bot needs to see all planets to build production facilities
 
@@ -75,36 +75,36 @@ class BotGameStateCollector
                 'planet_id' => $planet->getPlanetId(),
                 'coordinates' => $planet->getPlanetCoordinates(),
                 'name' => $planet->getPlanetName(),
-                
+
                 // Planet properties
                 'diameter' => $planet->getPlanetDiameter(),
                 'field_max' => $planet->getPlanetFieldMax(),
-                
+
                 // Resources
                 'metal_stored' => (int)$planet->metal()->get(),
                 'crystal_stored' => (int)$planet->crystal()->get(),
                 'deuterium_stored' => (int)$planet->deuterium()->get(),
                 'energy_available' => $planet->energy()->get(),
-                
+
                 // Production rates (per hour)
                 'metal_production' => (int)$planet->getMetalProductionPerHour(),
                 'crystal_production' => (int)$planet->getCrystalProductionPerHour(),
                 'deuterium_production' => (int)$planet->getDeuteriumProductionPerHour(),
-                
+
                 // Storage capacity
                 'metal_capacity' => $planet->metalStorage()->get(),
                 'crystal_capacity' => $planet->crystalStorage()->get(),
                 'deuterium_capacity' => $planet->deuteriumStorage()->get(),
-                
+
                 // All buildings (AI needs complete info to make decisions)
                 'buildings' => $this->getAllBuildings($planet),
-                
+
                 // Defense structures
                 'defenses' => $this->getDefenses($planet),
-                
+
                 // Ships on planet
                 'ships' => $this->getShips($planet),
-                
+
                 // Queue status with details
                 'build_queue_busy' => $this->isBuildQueueBusy($planet),
                 'build_queue_count' => $this->getBuildQueueCount($planet),
@@ -123,7 +123,7 @@ class BotGameStateCollector
     protected function getAllBuildings(PlanetService $planet): array
     {
         $buildings = [];
-        
+
         // Get all building types with correct machine names
         $buildingTypes = [
             // Production
@@ -159,14 +159,14 @@ class BotGameStateCollector
     protected function getDefenses(PlanetService $planet): array
     {
         $defenses = [];
-        
+
         $defenseTypes = [
-            'rocket_launcher', 'light_laser', 'heavy_laser', 
+            'rocket_launcher', 'light_laser', 'heavy_laser',
             'gauss_cannon', 'ion_cannon', 'plasma_turret',
             'small_shield_dome', 'large_shield_dome',
             'anti_ballistic_missile', 'interplanetary_missile',
         ];
-        
+
         foreach ($defenseTypes as $defense) {
             try {
                 $count = $planet->getObjectAmount($defense);
@@ -180,7 +180,7 @@ class BotGameStateCollector
                 // Defense not found
             }
         }
-        
+
         return $defenses;
     }
 
@@ -190,16 +190,16 @@ class BotGameStateCollector
     protected function getShips(PlanetService $planet): array
     {
         $ships = [];
-        
+
         $shipTypes = [
             // Combat ships
-            'light_fighter', 'heavy_fighter', 'cruiser', 'battleship', 
+            'light_fighter', 'heavy_fighter', 'cruiser', 'battleship',
             'battlecruiser', 'bomber', 'destroyer', 'deathstar',
             // Civil ships
-            'small_cargo', 'large_cargo', 'colony_ship', 'recycler', 
+            'small_cargo', 'large_cargo', 'colony_ship', 'recycler',
             'espionage_probe', 'solar_satellite',
         ];
-        
+
         foreach ($shipTypes as $ship) {
             try {
                 $count = $planet->getObjectAmount($ship);
@@ -213,7 +213,7 @@ class BotGameStateCollector
                 // Ship not found
             }
         }
-        
+
         return $ships;
     }
 
@@ -269,7 +269,7 @@ class BotGameStateCollector
     protected function collectResearch(PlayerService $player): array
     {
         $research = [];
-        
+
         // ALL research technologies (AI needs complete picture)
         $techTypes = [
             // Energy & Drives
@@ -344,13 +344,13 @@ class BotGameStateCollector
             // Get ALL ship types
             $shipTypes = [
                 // Combat ships
-                'light_fighter', 'heavy_fighter', 'cruiser', 'battleship', 
+                'light_fighter', 'heavy_fighter', 'cruiser', 'battleship',
                 'battlecruiser', 'bomber', 'destroyer', 'deathstar',
                 // Civil ships
-                'small_cargo', 'large_cargo', 'colony_ship', 'recycler', 
+                'small_cargo', 'large_cargo', 'colony_ship', 'recycler',
                 'espionage_probe', 'solar_satellite',
             ];
-            
+
             foreach ($shipTypes as $ship) {
                 try {
                     $count = $planet->getObjectAmount($ship);
@@ -366,7 +366,7 @@ class BotGameStateCollector
 
         // Get active fleet missions
         $activeMissions = $this->getActiveFleetMissions($player);
-        
+
         // Get fleet slots
         $slotsUsed = $player->getFleetSlotsInUse();
         $slotsMax = $player->getFleetSlotsMax();
@@ -383,20 +383,20 @@ class BotGameStateCollector
             'expedition_slots_max' => $expeditionSlotsMax,
         ];
     }
-    
+
     /**
      * Get active fleet missions
      */
     protected function getActiveFleetMissions(PlayerService $player): array
     {
         $missions = [];
-        
+
         try {
             $activeFleets = \DB::table('fleet_missions')
                 ->where('user_id', $player->getId())
                 ->where('canceled', 0)
                 ->get();
-            
+
             foreach ($activeFleets as $fleet) {
                 $missions[] = [
                     'mission_type' => $fleet->mission_type ?? 'unknown',
@@ -409,7 +409,7 @@ class BotGameStateCollector
         } catch (\Exception $e) {
             // Error getting missions
         }
-        
+
         return $missions;
     }
 
@@ -419,13 +419,13 @@ class BotGameStateCollector
     protected function collectThreats(PlayerService $player): array
     {
         $threats = [];
-        
+
         // Get planet IDs
         $planetIds = [];
         foreach ($player->planets->all() as $planet) {
             $planetIds[] = $planet->getPlanetId();
         }
-        
+
         if (empty($planetIds)) {
             return [
                 'incoming_attacks' => 0,
@@ -433,7 +433,7 @@ class BotGameStateCollector
                 'defense_gap' => 0,
             ];
         }
-        
+
         // Check for incoming attacks
         try {
             $incomingAttacks = \DB::table('fleet_missions')
@@ -468,15 +468,15 @@ class BotGameStateCollector
     {
         // Simplified: return negative if defense needed
         $totalDefense = 0;
-        
+
         // ALL defense types
         $defenseTypes = [
-            'rocket_launcher', 'light_laser', 'heavy_laser', 
+            'rocket_launcher', 'light_laser', 'heavy_laser',
             'gauss_cannon', 'ion_cannon', 'plasma_turret',
             'small_shield_dome', 'large_shield_dome',
             'anti_ballistic_missile', 'interplanetary_missile',
         ];
-        
+
         foreach ($player->planets->all() as $planet) {
             foreach ($defenseTypes as $defense) {
                 try {
@@ -514,9 +514,9 @@ class BotGameStateCollector
         foreach ($player->planets->all() as $planet) {
             $currentPlanetCount++;
         }
-        
+
         $maxPlanets = 9; // Adjust based on game rules
-        
+
         if ($currentPlanetCount >= $maxPlanets) {
             return [];
         }
@@ -534,7 +534,7 @@ class BotGameStateCollector
     protected function getBuildQueueItems(PlanetService $planet): array
     {
         $items = [];
-        
+
         try {
             $queueItems = \DB::table('building_queues')
                 ->where('planet_id', $planet->getPlanetId())
@@ -542,12 +542,12 @@ class BotGameStateCollector
                 ->where('canceled', 0)
                 ->orderBy('time_start', 'asc')
                 ->get();
-            
+
             foreach ($queueItems as $item) {
                 try {
                     $object = \OGame\Services\ObjectService::getObjectById($item->object_id);
                     $timeRemaining = max(0, $item->time_end - time());
-                    
+
                     $items[] = [
                         'building' => $object->machine_name,
                         'level' => $item->object_level_target,
@@ -561,7 +561,7 @@ class BotGameStateCollector
         } catch (\Exception $e) {
             // Error getting queue items
         }
-        
+
         return $items;
     }
 
@@ -571,26 +571,26 @@ class BotGameStateCollector
     protected function getUnitQueueItems(PlanetService $planet): array
     {
         $items = [];
-        
+
         try {
             $queueItems = \DB::table('unit_queues')
                 ->where('planet_id', $planet->getPlanetId())
                 ->where('processed', 0)
                 ->orderBy('time_start', 'asc')
                 ->get();
-            
+
             // Get defense object IDs to distinguish ships from defense
             $defenseObjectIds = array_column(\OGame\Services\ObjectService::getDefenseObjects(), 'id');
-            
+
             foreach ($queueItems as $item) {
                 try {
                     $object = \OGame\Services\ObjectService::getObjectById($item->object_id);
                     $timeRemaining = max(0, $item->time_end - time());
                     $remaining = $item->object_amount - ($item->object_amount_progress ?? 0);
-                    
+
                     // Determine if this is a defense structure or a ship
                     $isDefense = in_array($item->object_id, $defenseObjectIds);
-                    
+
                     $items[] = [
                         'unit' => $object->machine_name,
                         'type' => $isDefense ? 'defense' : 'ship',
@@ -605,7 +605,7 @@ class BotGameStateCollector
         } catch (\Exception $e) {
             // Error getting queue items
         }
-        
+
         return $items;
     }
 
@@ -615,7 +615,7 @@ class BotGameStateCollector
     protected function getResearchQueueItems(PlayerService $player): array
     {
         $items = [];
-        
+
         try {
             $queueItems = \DB::table('research_queues')
                 ->join('planets', 'research_queues.planet_id', '=', 'planets.id')
@@ -625,12 +625,12 @@ class BotGameStateCollector
                 ->select('research_queues.*')
                 ->orderBy('research_queues.time_start', 'asc')
                 ->get();
-            
+
             foreach ($queueItems as $item) {
                 try {
                     $object = \OGame\Services\ObjectService::getResearchObjectById($item->object_id);
                     $timeRemaining = max(0, $item->time_end - time());
-                    
+
                     $items[] = [
                         'technology' => $object->machine_name,
                         'level' => $item->object_level_target,
@@ -645,7 +645,7 @@ class BotGameStateCollector
         } catch (\Exception $e) {
             // Error getting queue items
         }
-        
+
         return $items;
     }
 }

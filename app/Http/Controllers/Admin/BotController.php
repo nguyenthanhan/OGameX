@@ -3,7 +3,6 @@
 namespace OGame\Http\Controllers\Admin;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use OGame\Http\Controllers\Controller;
 use OGame\Models\BotAiConfig;
@@ -57,7 +56,7 @@ class BotController extends Controller
             'bot_enabled' => 'boolean',
             'bot_notes' => 'nullable|string|max:1000',
         ]);
-        
+
         // Parse config_id and model from combined value
         [$configId, $model] = explode('|', $validated['bot_ai_config_model'], 2);
         $validated['bot_ai_config_id'] = $configId;
@@ -145,7 +144,7 @@ class BotController extends Controller
             'bot_enabled' => 'boolean',
             'bot_notes' => 'nullable|string|max:1000',
         ]);
-        
+
         // Parse config_id and model from combined value
         [$configId, $model] = explode('|', $validated['bot_ai_config_model'], 2);
         $validated['bot_ai_config_id'] = $configId;
@@ -193,15 +192,15 @@ class BotController extends Controller
 
         try {
             $botService = app(BotService::class);
-            
+
             // Check for active fleets first
             $fleetCheck = $botService->checkActiveFleets($botId);
-            
+
             if ($fleetCheck['has_fleets']) {
                 return redirect()->route('admin.bots.index')
                     ->with('error', "Cannot delete bot '{$botUsername}': {$fleetCheck['count']} active fleet mission(s) in progress. Wait for fleets to return or use force delete.");
             }
-            
+
             // Use BotService's comprehensive delete method
             $botService->deleteBot($botId, false);
 
@@ -213,7 +212,7 @@ class BotController extends Controller
                 ->with('error', 'Failed to delete bot: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * Force delete bot (cancels all active fleets)
      */
@@ -229,7 +228,7 @@ class BotController extends Controller
 
         try {
             $botService = app(BotService::class);
-            
+
             // Force delete (cancels all active fleets)
             $botService->deleteBot($botId, true);
 

@@ -17,7 +17,10 @@ use OGame\Factories\PlanetServiceFactory;
  */
 class ProcessGameQueuesJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct()
     {
@@ -36,19 +39,18 @@ class ProcessGameQueuesJob implements ShouldQueue
         try {
             // Process building queues
             $processed['buildings'] = $this->processBuildingQueues($planetFactory);
-            
+
             // Process research queues
             $processed['research'] = $this->processResearchQueues();
-            
+
             // Process unit queues
             $processed['units'] = $this->processUnitQueues($planetFactory);
-            
+
             $duration = round((microtime(true) - $startTime) * 1000, 2);
-            
+
             if ($processed['buildings'] > 0 || $processed['research'] > 0 || $processed['units'] > 0) {
                 Log::info("ProcessGameQueuesJob completed in {$duration}ms", $processed);
             }
-            
         } catch (\Exception $e) {
             Log::error("ProcessGameQueuesJob failed: " . $e->getMessage());
         }
@@ -60,29 +62,30 @@ class ProcessGameQueuesJob implements ShouldQueue
     private function processBuildingQueues(PlanetServiceFactory $planetFactory): int
     {
         $processed = 0;
-        
+
         // Get all planets with building queues (completed or waiting to start)
         $planets = DB::table('building_queues')
             ->select('planet_id')
             ->where('processed', 0)
-            ->where(function($query) {
+            ->where(function ($query) {
                 // Either completed buildings or waiting buildings
-                $query->where(function($q) {
+                $query->where(function ($q) {
                     $q->where('building', 1)->where('time_end', '<=', time());
-                })->orWhere(function($q) {
+                })->orWhere(function ($q) {
                     $q->where('building', 0)->where('time_start', 0);
                 });
             })
             ->distinct()
             ->pluck('planet_id');
-        
+
         foreach ($planets as $planetId) {
             try {
+                /** @var \OGame\Models\Planet|null $planetModel */
                 $planetModel = \OGame\Models\Planet::find($planetId);
                 if (!$planetModel) {
                     continue;
                 }
-                
+
                 $player = resolve(\OGame\Services\PlayerService::class, ['player_id' => $planetModel->user_id]);
                 $planet = $planetFactory->makeFromModel($planetModel, $player);
                 $planet->updateBuildingQueue();
@@ -91,7 +94,7 @@ class ProcessGameQueuesJob implements ShouldQueue
                 Log::warning("Failed to process building queue for planet {$planetId}: " . $e->getMessage());
             }
         }
-        
+
         return $processed;
     }
 
@@ -101,7 +104,7 @@ class ProcessGameQueuesJob implements ShouldQueue
     private function processResearchQueues(): int
     {
         $processed = 0;
-        
+
         // Get all users with completed research (join with planets to get user_id)
         $users = DB::table('research_queues')
             ->join('planets', 'research_queues.planet_id', '=', 'planets.id')
@@ -109,7 +112,7 @@ class ProcessGameQueuesJob implements ShouldQueue
             ->where('research_queues.time_end', '<=', time())
             ->distinct()
             ->pluck('user_id');
-        
+
         foreach ($users as $userId) {
             try {
                 $player = resolve(\OGame\Services\PlayerService::class, ['player_id' => $userId]);
@@ -119,7 +122,7 @@ class ProcessGameQueuesJob implements ShouldQueue
                 Log::warning("Failed to process research queue for user {$userId}: " . $e->getMessage());
             }
         }
-        
+
         return $processed;
     }
 
@@ -129,21 +132,22 @@ class ProcessGameQueuesJob implements ShouldQueue
     private function processUnitQueues(PlanetServiceFactory $planetFactory): int
     {
         $processed = 0;
-        
+
         // Get all planets with completed unit queues
         $planets = DB::table('unit_queues')
             ->select('planet_id')
             ->where('time_end', '<=', time())
             ->distinct()
             ->pluck('planet_id');
-        
+
         foreach ($planets as $planetId) {
             try {
+                /** @var \OGame\Models\Planet|null $planetModel */
                 $planetModel = \OGame\Models\Planet::find($planetId);
                 if (!$planetModel) {
                     continue;
                 }
-                
+
                 $player = resolve(\OGame\Services\PlayerService::class, ['player_id' => $planetModel->user_id]);
                 $planet = $planetFactory->makeFromModel($planetModel, $player);
                 $planet->updateUnitQueue();
@@ -152,7 +156,7 @@ class ProcessGameQueuesJob implements ShouldQueue
                 Log::warning("Failed to process unit queue for planet {$planetId}: " . $e->getMessage());
             }
         }
-        
+
         return $processed;
     }
 }

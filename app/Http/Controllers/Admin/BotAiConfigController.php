@@ -2,8 +2,11 @@
 
 namespace OGame\Http\Controllers\Admin;
 
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\View\View;
 use OGame\Http\Controllers\Controller;
 use OGame\Models\BotAiConfig;
 
@@ -12,7 +15,7 @@ class BotAiConfigController extends Controller
     /**
      * Display list of bot AI configurations
      */
-    public function index()
+    public function index(): View
     {
         $configs = BotAiConfig::with('creator')
             ->orderBy('created_at', 'desc')
@@ -20,7 +23,7 @@ class BotAiConfigController extends Controller
 
         // Add bot count to each config
         foreach ($configs as $config) {
-            $config->bots_count = $config->bots()->count();
+            $config->setAttribute('bots_count', $config->bots()->count());
         }
 
         return view('admin.bot-configs.index', compact('configs'));
@@ -29,7 +32,7 @@ class BotAiConfigController extends Controller
     /**
      * Show create form
      */
-    public function create()
+    public function create(): View
     {
         return view('admin.bot-configs.create');
     }
@@ -37,7 +40,7 @@ class BotAiConfigController extends Controller
     /**
      * Store new configuration
      */
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'name' => 'required|string|max:100|unique:bot_ai_configs,name',
@@ -50,7 +53,7 @@ class BotAiConfigController extends Controller
 
         $validated['created_by'] = Auth::id();
         $validated['is_active'] = $request->has('is_active');
-        
+
         // Convert comma-separated models to array
         $validated['bot_ai_model'] = array_map('trim', explode(',', $validated['bot_ai_model']));
 
@@ -63,7 +66,7 @@ class BotAiConfigController extends Controller
     /**
      * Show edit form
      */
-    public function edit(BotAiConfig $botAiConfig)
+    public function edit(BotAiConfig $botAiConfig): View
     {
         $botsCount = $botAiConfig->bots()->count();
         return view('admin.bot-configs.edit', compact('botAiConfig', 'botsCount'));
@@ -72,7 +75,7 @@ class BotAiConfigController extends Controller
     /**
      * Update configuration
      */
-    public function update(Request $request, BotAiConfig $botAiConfig)
+    public function update(Request $request, BotAiConfig $botAiConfig): RedirectResponse
     {
         $validated = $request->validate([
             'name' => 'required|string|max:100|unique:bot_ai_configs,name,' . $botAiConfig->id,
@@ -89,7 +92,7 @@ class BotAiConfigController extends Controller
         }
 
         $validated['is_active'] = $request->has('is_active');
-        
+
         // Convert comma-separated models to array
         $validated['bot_ai_model'] = array_map('trim', explode(',', $validated['bot_ai_model']));
 
@@ -102,7 +105,7 @@ class BotAiConfigController extends Controller
     /**
      * Delete configuration
      */
-    public function destroy(BotAiConfig $botAiConfig)
+    public function destroy(BotAiConfig $botAiConfig): RedirectResponse
     {
         $botsCount = $botAiConfig->bots()->count();
 
@@ -120,7 +123,7 @@ class BotAiConfigController extends Controller
     /**
      * Toggle active status (AJAX)
      */
-    public function toggleActive(BotAiConfig $botAiConfig)
+    public function toggleActive(BotAiConfig $botAiConfig): JsonResponse
     {
         $botAiConfig->update(['is_active' => !$botAiConfig->is_active]);
 
@@ -133,7 +136,7 @@ class BotAiConfigController extends Controller
     /**
      * Duplicate configuration
      */
-    public function duplicate(BotAiConfig $botAiConfig)
+    public function duplicate(BotAiConfig $botAiConfig): RedirectResponse
     {
         // Generate unique name with incremental number
         $baseName = $botAiConfig->name;

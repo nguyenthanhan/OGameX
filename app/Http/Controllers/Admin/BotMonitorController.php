@@ -152,7 +152,7 @@ class BotMonitorController extends Controller
             $icon = $decision->result === 'success' ? '✅' : ($decision->result === 'failed' ? '❌' : '⚠️');
             $color = $decision->result === 'success' ? '#4a7c4a' : ($decision->result === 'failed' ? '#7c4a4a' : '#f39c12');
             $bgColor = $decision->result === 'success' ? '#1a3a1a' : ($decision->result === 'failed' ? '#3a1a1a' : '#2a2a1a');
-            
+
             $entry = [
                 'timestamp' => $decision->created_at,
                 'type' => 'decision',
@@ -175,11 +175,13 @@ class BotMonitorController extends Controller
         if (file_exists($logFile)) {
             $command = "grep 'Bot {$botId} AI API' {$logFile} | tail -n 50";
             $logLines = shell_exec($command);
-            
+
             if ($logLines) {
                 $lines = explode("\n", trim($logLines));
                 foreach ($lines as $line) {
-                    if (empty($line)) continue;
+                    if (empty($line)) {
+                        continue;
+                    }
 
                     // Parse API Request
                     if (strpos($line, 'AI API Request') !== false) {
@@ -187,7 +189,7 @@ class BotMonitorController extends Controller
                             $timestamp = $matches[1];
                             $model = '';
                             $tokens = '';
-                            
+
                             if (preg_match('/"model":"([^"]+)"/', $line, $m)) {
                                 $model = $m[1];
                             }
@@ -213,7 +215,7 @@ class BotMonitorController extends Controller
                             $model = '';
                             $tokens = 0;
                             $cost = 0;
-                            
+
                             if (preg_match('/"model":"([^"]+)"/', $line, $m)) {
                                 $model = $m[1];
                             }
@@ -242,7 +244,7 @@ class BotMonitorController extends Controller
         }
 
         // Sort by timestamp descending
-        usort($timeline, function($a, $b) {
+        usort($timeline, function ($a, $b) {
             return strtotime($b['timestamp']) - strtotime($a['timestamp']);
         });
 

@@ -1514,15 +1514,15 @@ class PlanetService
             if ($item->object_amount <= 0) {
                 continue;
             }
-            
+
             // Check if time difference is valid
             $time_diff = $item->time_end - $item->time_start;
             if ($time_diff <= 0 || !is_numeric($time_diff)) {
                 continue;
             }
-            
+
             $time_per_unit = $time_diff / $item->object_amount;
-            
+
             // Prevent division by zero: if time_per_unit is 0, invalid, NaN, or INF, skip this item
             if ($time_per_unit <= 0 || !is_finite($time_per_unit)) {
                 continue;

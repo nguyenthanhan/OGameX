@@ -12,7 +12,10 @@ use OGame\Services\Bot\BotService;
 
 class ProcessBotTurnsJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Get bot log channel

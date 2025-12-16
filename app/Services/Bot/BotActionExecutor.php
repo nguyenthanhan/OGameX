@@ -13,7 +13,7 @@ use OGame\Services\ResearchQueueService;
 
 /**
  * Bot Action Executor
- * 
+ *
  * Executes bot decisions by calling existing game services
  */
 class BotActionExecutor
@@ -22,7 +22,8 @@ class BotActionExecutor
         protected BuildingQueueService $buildingQueueService,
         protected ResearchQueueService $researchQueueService,
         protected PlanetServiceFactory $planetServiceFactory
-    ) {}
+    ) {
+    }
 
     /**
      * Get bot log channel
@@ -34,7 +35,7 @@ class BotActionExecutor
 
     /**
      * Execute all actions from a decision
-     * 
+     *
      * @param User $bot
      * @param array $decision
      * @param string $turnId
@@ -72,10 +73,9 @@ class BotActionExecutor
                         'error_message' => $result['error'] ?? null,
                         'updated_at' => now(),
                     ]);
-
             } catch (Exception $e) {
                 $this->botLog()->error("[ACTION_FAILED] Bot:{$bot->id} Error:" . str_replace([' ', "\n"], ['_', ''], substr($e->getMessage(), 0, 50)) . " | Bot {$bot->id} action failed: " . $e->getMessage());
-                
+
                 $results[] = [
                     'action' => $action,
                     'result' => ['success' => false, 'error' => $e->getMessage()],
@@ -110,7 +110,7 @@ class BotActionExecutor
 
     /**
      * Execute a single action
-     * 
+     *
      * @param User $bot
      * @param PlayerService $player
      * @param array $action
@@ -125,15 +125,15 @@ class BotActionExecutor
             'BUILD_BUILDING' => $this->executeBuildBuilding($player, $action),
             'CANCEL_BUILDING' => $this->executeCancelBuilding($player, $action),
             'DEMOLISH_BUILDING' => $this->executeDemolishBuilding($player, $action),
-            
+
             // Research actions
             'START_RESEARCH' => $this->executeStartResearch($player, $action),
             'CANCEL_RESEARCH' => $this->executeCancelResearch($player, $action),
-            
+
             // Unit production actions
             'BUILD_UNITS' => $this->executeBuildUnits($player, $action),
             'CANCEL_UNITS' => $this->executeCancelUnits($player, $action),
-            
+
             // Fleet operations
             'SEND_FLEET' => $this->executeSendFleet($player, $action),
             'CANCEL_FLEET' => $this->executeCancelFleet($player, $action),
@@ -144,13 +144,13 @@ class BotActionExecutor
             'COLONIZE' => $this->executeColonize($player, $action),
             'EXPEDITION' => $this->executeExpedition($player, $action),
             'HARVEST_DEBRIS' => $this->executeHarvestDebris($player, $action),
-            
+
             // Resource management
             'ABANDON_PLANET' => $this->executeAbandonPlanet($player, $action),
-            
+
             // Other
             'WAIT' => $this->executeWait($action),
-            
+
             default => ['success' => false, 'error' => "Unknown action type: {$actionType}"],
         };
     }
@@ -210,7 +210,6 @@ class BotActionExecutor
                 'level' => $nextLevel,
                 'planet_id' => $planetId,
             ];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -284,7 +283,6 @@ class BotActionExecutor
                 'technology' => $techName,
                 'level' => $nextLevel,
             ];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -317,7 +315,7 @@ class BotActionExecutor
             $unitQueue = DB::table('unit_queues')
                 ->where('planet_id', $planetId)
                 ->exists();
-            
+
             if ($unitQueue) {
                 return ['success' => false, 'error' => 'Unit queue is busy'];
             }
@@ -335,7 +333,7 @@ class BotActionExecutor
                 $price->crystal->get() * $quantity,
                 $price->deuterium->get() * $quantity
             );
-            
+
             if (!$planet->hasResources($totalPrice)) {
                 return ['success' => false, 'error' => 'Insufficient resources'];
             }
@@ -360,7 +358,6 @@ class BotActionExecutor
                 'quantity' => $quantity,
                 'planet_id' => $planetId,
             ];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -378,7 +375,7 @@ class BotActionExecutor
         // - Mission type validation
         // - Flight time calculation
         // - Resource loading (for transport missions)
-        
+
         return [
             'success' => false,
             'error' => 'SEND_FLEET action not yet fully implemented. Coming soon!',
@@ -411,7 +408,7 @@ class BotActionExecutor
 
         try {
             $planet = $player->planets->getById($planetId);
-            
+
             // Get first building in queue if no specific queue_id provided
             if (!$queueId) {
                 $queueItem = DB::table('building_queues')
@@ -419,7 +416,7 @@ class BotActionExecutor
                     ->where('processed', 0)
                     ->orderBy('time_start', 'asc')
                     ->first();
-                    
+
                 if (!$queueItem) {
                     return ['success' => false, 'error' => 'No building in queue'];
                 }
@@ -431,7 +428,6 @@ class BotActionExecutor
             $this->botLog()->info("[ACTION_CANCEL_BUILDING] Bot:{$player->getId()} Type:CANCEL_BUILDING QueueId:{$queueId} Planet:{$planetId} | Bot {$player->getId()} canceled building queue item {$queueId} on planet {$planetId}");
 
             return ['success' => true, 'queue_id' => $queueId];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -457,7 +453,7 @@ class BotActionExecutor
     {
         try {
             $planet = $player->planets->current();
-            
+
             // Get current research in progress
             $queueItem = DB::table('research_queues')
                 ->join('users', 'research_queues.user_id', '=', 'users.id')
@@ -477,7 +473,6 @@ class BotActionExecutor
             $this->botLog()->info("[ACTION_CANCEL_RESEARCH] Bot:{$player->getId()} Type:CANCEL_RESEARCH QueueId:{$queueItem->id} | Bot {$player->getId()} canceled research queue item {$queueItem->id}");
 
             return ['success' => true, 'queue_id' => $queueItem->id];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -496,7 +491,7 @@ class BotActionExecutor
 
         try {
             $planet = $player->planets->getById($planetId);
-            
+
             // Get unit queue
             $queueItem = DB::table('unit_queues')
                 ->where('planet_id', $planetId)
@@ -514,7 +509,7 @@ class BotActionExecutor
                 $price->crystal->get() * $queueItem->object_amount,
                 $price->deuterium->get() * $queueItem->object_amount
             );
-            
+
             $planet->addResources($totalPrice);
 
             // Delete queue item
@@ -523,7 +518,6 @@ class BotActionExecutor
             $this->botLog()->info("[ACTION_CANCEL_UNITS] Bot:{$player->getId()} Type:CANCEL_UNITS Planet:{$planetId} | Bot {$player->getId()} canceled unit production on planet {$planetId}");
 
             return ['success' => true, 'planet_id' => $planetId];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -555,17 +549,16 @@ class BotActionExecutor
             // Use FleetMissionService to cancel
             $fleetService = app(\OGame\Services\FleetMissionService::class);
             $fleetMission = \OGame\Models\FleetMission::find($fleetId);
-            
+
             if ($fleetMission) {
                 $fleetService->cancelMission($fleetMission);
-                
+
                 $this->botLog()->info("[ACTION_CANCEL_FLEET] Bot:{$player->getId()} Type:CANCEL_FLEET FleetId:{$fleetId} | Bot {$player->getId()} canceled fleet mission {$fleetId}");
-                
+
                 return ['success' => true, 'fleet_id' => $fleetId];
             }
 
             return ['success' => false, 'error' => 'Fleet mission not found'];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -677,7 +670,6 @@ class BotActionExecutor
             $this->botLog()->warning("Bot {$player->getId()} abandoned planet {$planetId}");
 
             return ['success' => true, 'planet_id' => $planetId];
-
         } catch (Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
